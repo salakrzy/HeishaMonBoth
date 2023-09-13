@@ -37,6 +37,7 @@ const std::string Topics::SET24 = setTopicPrefix + s + "SetSGReadyCapacity2Heat"
 const std::string Topics::SET25 = setTopicPrefix + s + "SetSGReadyCapacity2DHW";
 const std::string Topics::SET26 = setTopicPrefix + s + "SetDHWRoomMaxTime";
 
+
 // state topics
 // Can be configured.
 const char *States::TOP0 = "Heatpump_State";
