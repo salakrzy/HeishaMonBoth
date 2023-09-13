@@ -39,14 +39,13 @@ String actual_data[NUMBEROFTOPICS];
 
 // log message
 char log_msg[MAXDATASIZE];
-
+unsigned long lastReconnectAttempt = 0;
 
 WebServer httpServer(80);
 HTTPUpdateServer httpUpdater;
-
 WiFiClient mqtt_wifi_client;
 PubSubClient mqtt_client(mqtt_wifi_client);
-unsigned long lastReconnectAttempt = 0;
+
 
 byte initialQuery[] =  {0x31, 0x05, 0x10, 0x01, 0x00, 0x00, 0x00,0xB9};
 byte mainQuery[]    =  {0x71, 0x6c, 0x01, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -189,9 +188,9 @@ void setupSerial()
   // you can change Tx and Rx to any GPIO Serialx.begin(9600, SERIAL_8E1, Rx,Tx);
   Serial.begin(115200,SERIAL_8N1,3,1); //initial Serial for monitoring
 
-  Serial1.begin(9600, SERIAL_8E1,10,9);    //Serial1 goes to cn-cnt in Panasonic Heat Pump, default  Rx=GPIO9 Tx=GPIO10
+  Serial1.begin(9600, SERIAL_8E1,27,26);    //Serial1 goes to cn-cnt in Panasonic Heat Pump, 
   Serial1.flush();
-  Serial2.begin(9600, SERIAL_8E1,16,17);    // Serial2 goes to cz-taw1, default  Rx=GPIO16 Tx=GPIO17
+  Serial2.begin(9600, SERIAL_8E1,17,16);    // Serial2 goes to cz-taw1, 
   Serial2.flush();
 }
 
@@ -325,7 +324,6 @@ bool readHeatPump()
     sprintf(log_msg, "Partial Heat Pump  data length %d, please fix Read_Pana_Data_Timer", serial1_length); 
     write_telnet_log(log_msg);
   }
-  
   return false;
 }
 
@@ -365,9 +363,9 @@ void send_pana_command()
       Serial1.write(calculate_checksum(cztaw_Buffer));
       serialquerysent = true;    
       cz_taw_query=true;
-      cztaw_Buffer[1]=0x0;
       write_telnet_log((char *)"send CZTAW buffer");  
       if (outputHexLog) write_hex_log((char*)cztaw_Buffer,  cztaw_Buffer[1]+2);
+      cztaw_Buffer[1]=0x0;
     }
     else if (!mainQuery[1]== 0) {
       Serial1.write(mainQuery, mainQuery[1]+2);
@@ -578,11 +576,12 @@ void setup()
   TelnetStream.begin();
   write_telnet_log((char *)"Connect Serial1 to to heatpump. Look for debug on mqtt log topic.");
   Timeout_Restart_Timer.start();
+  
   while (true) {
     if (Serial1.available() > 0) {initialResponse[serial1_length] = Serial1.read();
       // only enable next line to DEBUG
       //sprintf(log_msg, "DEBUG Receive Serial1 byte : %d  %#x", serial1_length, initialResponse[serial1_length]); write_telnet_log(log_msg);
-        Serial.printf ( "%#x",initialResponse[serial1_length]);
+      //  Serial.printf ( "%#x",initialResponse[serial1_length]);
         serial1_length += 1;
     } 
 		else if ((initialResponse[0]==0x31) and  validate_checksum(serial1_data,serial1_length))  {
@@ -597,8 +596,8 @@ void setup()
       delay(500);
     }
     Timeout_Restart_Timer.update();
-
 	}
+  
   serial1_length=0;
   Send_Pana_Mainquery_Timer.start(); // start only the query timer
   lastReconnectAttempt = 0;
