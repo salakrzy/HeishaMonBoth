@@ -1,0 +1,16 @@
+.pio
+.vscode
+.pioenvs
+.cache
+.piolibdeps
+.DS_Store
+.clang_complete
+.gcc-flags.json
+.devcontainer
+tmp work
+doc_tmp
+build_output
+include
+firmware.map
+extensions.json
+platformio_user_env.ini
