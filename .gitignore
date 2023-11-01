@@ -9,6 +9,7 @@
 .devcontainer
 tmp work
 doc_tmp
+build
 build_output
 include
 firmware.map
