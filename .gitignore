@@ -1,16 +1,16 @@
-.pio
-.vscode
-.pioenvs
 .cache
+.pio
+.pioenvs
+.vscode
+build_output
+doc_tmp
+tmp work
+build
 .piolibdeps
 .DS_Store
 .clang_complete
 .gcc-flags.json
 .devcontainer
-tmp work
-doc_tmp
-build
-build_output
 include
 firmware.map
 extensions.json
