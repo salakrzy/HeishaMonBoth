@@ -1040,7 +1040,7 @@ void setupSerial() {
 
   Serial1.begin(9600, SERIAL_8E1,27,26);    //Serial goes to cn-cnt in Panasonic Heat Pump, 
   Serial1.flush();
-  Serial2.begin(9600, SERIAL_8E1,17,16);    // Serial2 goes to cz-taw1, 
+  Serial2.begin(9600, SERIAL_8E1,16,17);    // Serial2 goes to cz-taw1, 
   Serial2.flush();
 }
 

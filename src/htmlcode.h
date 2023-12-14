@@ -187,7 +187,7 @@ static const char webBodyRoot1[] PROGMEM =
   "<hr><div class=\"w3-text-grey\">Version: ";
 
 static const char webBodyRoot2[] PROGMEM =
-  "<br><a href=\"https://github.com/Egyras/HeishaMon\">Heishamon software</a></div><hr></div>"
+  "<br><a href=\"https://github.com/salakrzy/HeishaMonBoth\">HeishamonBoth software</a></div><hr></div>"
   "<div class=\"w3-bar w3-red\">"
   "<button class=\"w3-bar-item w3-button\" onclick=\"openTable('Heatpump')\">Heatpump</button>";
 

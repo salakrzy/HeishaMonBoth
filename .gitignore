@@ -2,7 +2,6 @@
 .pio
 .pioenvs
 .vscode
-build_output
 doc_tmp
 tmp work
 build
