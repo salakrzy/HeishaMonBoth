@@ -1,5 +1,5 @@
 #include <PubSubClient.h>
-#include <WiFi.h>
+#include <WiFi.h>//####ESP32
 
 #define NUMGPIO 3
 

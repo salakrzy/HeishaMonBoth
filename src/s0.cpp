@@ -151,7 +151,7 @@ void s0Loop(PubSubClient &mqtt_client, void (*log_message)(char*), char* mqtt_to
         allLastEdgeS0Index[i]--;
         sprintf_P(log_msg, PSTR("Pulse widths seen on S0 port %d: Width: %lu"), (i + 1),  allLastEdgeS0[i][j] );
         //log_message(log_msg);
-        Serial.println(log_msg);
+        Serial.println(log_msg); //####ESP32
         j++;
         }
         interrupts();

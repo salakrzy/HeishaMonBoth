@@ -2,8 +2,8 @@
 #include "src/common/webserver.h"
 
 #define NUM_S0_COUNTERS 2
-#define DEFAULT_S0_PIN_1 22  // 12 S0_1 pin, for now a static config - should be in config menu later
-#define DEFAULT_S0_PIN_2 23  // 14 S0_2 pin, for now a static config - should be in config menu later
+#define DEFAULT_S0_PIN_1 22  //ESP8266  12 S0_1 pin, for now a static config - should be in config menu later
+#define DEFAULT_S0_PIN_2 23  //ESP8266  14 S0_2 pin, for now a static config - should be in config menu later
 
 struct s0SettingsStruct {
   byte gpiopin = 255;

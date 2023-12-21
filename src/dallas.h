@@ -7,7 +7,7 @@
 #include "src/common/webserver.h"
 
 #define MAX_DALLAS_SENSORS 15
-#define ONE_WIRE_BUS 32  // DS18B20 pin, for now a static config - should be in config menu later
+#define ONE_WIRE_BUS 32  ////ESP32DS18B20 pin, for now a static config - should be in config menu later
 
 struct dallasDataStruct {
   float temperature = -127.0;

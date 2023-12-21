@@ -1,3 +1,4 @@
+
 #define LWIP_INTERNAL
 
 #include <Arduino.h>
@@ -13,11 +14,14 @@
 #include "src/common/timerqueue.h"
 #include "src/common/stricmp.h"
 #include "src/common/log.h"
+#include "src/common/progmem.h"
 #include "src/rules/rules.h"
+
 #include "webfunctions.h"
 #include "decode.h"
 #include "commands.h"
 #include "rules.h"
+#include "version.h"
 
 DNSServer dnsServer;
 
@@ -52,6 +56,9 @@ settingsStruct heishamonSettings;
 bool sending = false; // mutex for sending data
 bool mqttcallbackinprogress = false; // mutex for processing mqtt callback
 
+bool extraDataBlockAvailable = false; // this will be set to true if, during boot, heishamon detects this heatpump has extra data block (like K and L series do)
+bool extraDataBlockChecked = false; // this will be true if we already checked for the extra data block
+
 #define MQTTRECONNECTTIMER 30000 //it takes 30 secs for each mqtt server reconnect attempt
 unsigned long lastMqttReconnectAttempt = 0;
 
@@ -60,8 +67,10 @@ unsigned long lastWifiRetryTimer = 0;
 
 unsigned long lastRunTime = 0;
 unsigned long lastOptionalPCBRunTime = 0;
+unsigned long lastOptionalPCBSave = 0;
 
 unsigned long sendCommandReadTime = 0; //set to millis value during send, allow to wait millis for answer
+unsigned long freshPumpAnswer= 0; //####ESP32
 unsigned long goodreads = 0;
 unsigned long totalreads = 0;
 unsigned long cztaw_totalreads = 0;
@@ -87,6 +96,7 @@ char initialResponse[51]={'\0'};
 // store actual data
 String openTherm[2];
 char actData[DATASIZE] = { '\0' };
+char actDataExtra[DATASIZE] = { '\0' };
 #define OPTDATASIZE 20
 char actOptData[OPTDATASIZE]  = { '\0' };
 String RESTmsg = "";
@@ -125,11 +135,12 @@ bool firstConnectSinceBoot = true; //if this is true there is no first connectio
 struct timerqueue_t **timerqueue = NULL;
 int timerqueue_size = 0;
 
+
 /*
     check_wifi will process wifi reconnecting managing
 */
 
-void setupOTA() {
+void setupOTA() {   //VVV
 //   ArduinoOTA.setPort(8266);				Port defaults to 8266
   ArduinoOTA.setPort(3232);              // Port defaults for esp32
 
@@ -170,7 +181,7 @@ void check_wifi()
         also, do not disconnect if wifi network scan is active
     */
     if ((heishamonSettings.wifi_ssid[0] != '\0') && (WiFi.status() != WL_DISCONNECTED) && (WiFi.scanComplete() != -1) && (WiFi.softAPgetStationNum() > 0))  {
-      log_message("WiFi lost, but softAP station connecting, so stop trying to connect to configured ssid...");
+      log_message(_F("WiFi lost, but softAP station connecting, so stop trying to connect to configured ssid..."));
       if (true==WiFi.disconnect(true)){
         log_e("Wifi diconected TRUE, WiFi Status %i= ",WiFi.status());    
       }else{
@@ -182,20 +193,20 @@ void check_wifi()
     */
     if ((heishamonSettings.wifi_ssid[0] != '\0') && ((unsigned long)(millis() - lastWifiRetryTimer) > WIFIRETRYTIMER ) ) {
       lastWifiRetryTimer = millis();
-      if ((WiFi.softAPSSID() == "") or (WiFi.softAPSSID() !="HeishaMon-Setup")) {  // ESP32 set name soft AP ESP-XXXXXX not NULL
-        log_message("WiFi lost, starting setup hotspot...");
+      if ((WiFi.softAPSSID() == "") or (WiFi.softAPSSID() !="HeishaMon-Setup")) { //####ESP32 set name soft AP ESP-XXXXXX not NULL
+        log_message(_F("WiFi lost, starting setup hotspot..."));
         WiFi.softAP((char*)"HeishaMon-Setup");
         Serial.println(WiFi.softAPSSID());
       }
       if ((WiFi.status() != WL_DISCONNECTED)  && (WiFi.softAPgetStationNum() == 0 )) {
-        log_message("Retrying configured WiFi, ...");
+        log_message(_F("Retrying configured WiFi, ..."));
         if (heishamonSettings.wifi_password[0] == '\0') {
           WiFi.begin(heishamonSettings.wifi_ssid);
         } else {
           WiFi.begin(heishamonSettings.wifi_ssid, heishamonSettings.wifi_password);
         }
       } else {
-        log_message("Reconnecting to WiFi failed. Waiting a few seconds before trying again.");
+        log_message(_F("Reconnecting to WiFi failed. Waiting a few seconds before trying again."));
         WiFi.disconnect(true);
       }
     }
@@ -203,7 +214,7 @@ void check_wifi()
   else { //WiFi Status=WL_CONNECTED  and IP>0  check if active AP and disable if yes
   if((WiFi.getMode() & WIFI_MODE_AP) != 0) {
     // ESP8266   if (WiFi.softAPSSID() != "") {
-    log_message("WiFi (re)connected, shutting down hotspot...");
+    log_message(_F("WiFi (re)connected, shutting down hotspot..."));
     WiFi.softAPdisconnect(true);
   // ESP8266      MDNS.notifyAPChange();
   }
@@ -217,7 +228,7 @@ void check_wifi()
       // ESP8266 experimental::ESP8266WiFiGratuitous::stationKeepAliveSetIntervalMs(5000); //necessary for some users with bad wifi routers
 
       if (heishamonSettings.wifi_ssid[0] == '\0') {
-        log_message("WiFi connected without SSID and password in settings. Must come from persistent memory. Storing in settings.");
+        log_message(_F("WiFi connected without SSID and password in settings. Must come from persistent memory. Storing in settings."));
         WiFi.SSID().toCharArray(heishamonSettings.wifi_ssid, 40);
         WiFi.psk().toCharArray(heishamonSettings.wifi_password, 40);
         DynamicJsonDocument jsonDoc(1024);
@@ -244,14 +255,16 @@ void mqtt_reconnect()
   unsigned long now = millis();
   if ((lastMqttReconnectAttempt == 0) || ((unsigned long)(now - lastMqttReconnectAttempt) > MQTTRECONNECTTIMER)) { //only try reconnect each MQTTRECONNECTTIMER seconds or on boot when lastMqttReconnectAttempt is still 0
     lastMqttReconnectAttempt = now;
-    log_message("Reconnecting to mqtt server ...");
+    log_message(_F("Reconnecting to mqtt server ..."));
     char topic[256];
     sprintf(topic, "%s/%s", heishamonSettings.mqtt_topic_base, mqtt_willtopic);
     if (mqtt_client.connect(heishamonSettings.wifi_hostname, heishamonSettings.mqtt_username, heishamonSettings.mqtt_password, topic, 1, true, "Offline"))
     {
       mqttReconnects++;
-
-      mqtt_client.subscribe("panasonic_heat_pump/opentherm/#");
+      if (heishamonSettings.opentherm) {
+        sprintf(topic, "%s/%s/#", heishamonSettings.mqtt_topic_base, mqtt_topic_opentherm);
+        mqtt_client.subscribe(topic);
+      }
       sprintf(topic, "%s/%s/#", heishamonSettings.mqtt_topic_base, mqtt_topic_commands);
       mqtt_client.subscribe(topic);
       sprintf(topic, "%s/%s", heishamonSettings.mqtt_topic_base, mqtt_send_raw_value_topic);
@@ -271,22 +284,16 @@ void mqtt_reconnect()
         if (heishamonSettings.use_1wire) resetlastalldatatime_dallas(); //resend all 1wire values to mqtt
         resetlastalldatatime(); //resend all heatpump values to mqtt
       }
+      //use this to receive valid heishamon raw data from other heishamon to debug this OT code
+#define OTDEBUG
+#ifdef OTDEBUG
+      if ( heishamonSettings.listenonly && heishamonSettings.listenmqtt ) {
+        sprintf(topic, "%s/raw/data", heishamonSettings.mqtt_topic_listen);
+        mqtt_client.subscribe(topic); //subscribe to raw heatpump data over MQTT
+      }
+#endif
     }
   }
-}
-
-void log_message(const __FlashStringHelper *msg) {
-  PGM_P p = (PGM_P)msg;
-  int len = strlen_P((const char *)p);
-  char *str = (char *)MALLOC(len + 1);
-  if (str == NULL) {
-    OUT_OF_MEMORY
-  }
-  strcpy_P(str, p);
-
-  log_message(str);
-
-  FREE(str);
 }
 
 void log_message(char* string)
@@ -300,7 +307,7 @@ void log_message(char* string)
   char* log_line = (char *) malloc(len);
   snprintf(log_line, len, "%s (%lu): %s", timestring, millis(), string);
 
-  if (heishamonSettings.logSerial) {
+  if (heishamonSettings.logSerial) { //####ESP32
     Serial.println(log_line);
   }
   if (heishamonSettings.logMqtt && mqtt_client.connected())
@@ -309,7 +316,7 @@ void log_message(char* string)
     sprintf(log_topic, "%s/%s", heishamonSettings.mqtt_topic_base, mqtt_logtopic);
 
     if (!mqtt_client.publish(log_topic, log_line)) {
-      if (heishamonSettings.logSerial) {
+      if (heishamonSettings.logSerial) {//####ESP32
         Serial.print(millis());
         Serial.print(": ");
         Serial.println("MQTT publish log message failed!");
@@ -333,6 +340,14 @@ void logHex(char *hex, byte hex_len) {
   }
 }
 
+void mqttPublish(char* topic, char* subtopic, char* value) {
+  char mqtt_topic[256];
+  sprintf_P(mqtt_topic, PSTR("%s/%s/%s"), heishamonSettings.mqtt_topic_base, topic, subtopic);
+  mqtt_client.publish(mqtt_topic, value, MQTT_RETAIN_VALUES);
+}
+
+
+
 byte calcChecksum(byte* command, int length) {
   byte chk = 0;
   for ( int i = 0; i < length; i++)  {
@@ -342,17 +357,17 @@ byte calcChecksum(byte* command, int length) {
   return chk;
 }
 
-bool isValidReceiveChecksum(char* serialx_data, byte serialx_length) {
+bool isValidReceiveChecksum(char* serialx_data, byte serialx_length) {//####ESP32
   byte chk = 0;
-  for ( int i = 0; i < serialx_length; i++)  {
-    chk += serialx_data[i];
+  for ( int i = 0; i < serialx_length; i++)  {//####ESP32
+    chk += serialx_data[i];//####ESP32
   }
   return (chk == 0); //all received bytes + checksum should result in 0
 }
 
-void pushCommandBuffer(byte* command, int length, int source) {
+void pushCommandBuffer(byte* command, int length, int source) {//####ESP32//VVV
   if (cmdnrel + 1 > MAXCOMMANDSINBUFFER) {
-    log_message("Too much commands already in buffer. Ignoring this commands.\n");
+    log_message(_F("Too much commands already in buffer. Ignoring this commands.\n"));
     return;
   }
   cmdbuffer[cmdend].length = length;
@@ -364,14 +379,14 @@ void pushCommandBuffer(byte* command, int length, int source) {
 
 
 
-bool send_command(byte* command, int length, int source) {
+bool send_command(byte* command, int length, int source) { //####ESP32//VVV
 
   if ( heishamonSettings.listenonly and source!=CZTAW) {
-    log_message("Not sending this command. Heishamon in listen only mode!");
+    log_message(_F("Not sending this command. Heishamon in listen only mode!"));
     return false;
   }
   if ( sending ) {
-    log_message("Already sending data. Buffering this send request");
+    log_message(_F("Already sending data. Buffering this send request"));
     pushCommandBuffer(command, length, source);
     return false;
   }
@@ -391,23 +406,23 @@ bool send_command(byte* command, int length, int source) {
   return true;
 }
 
-void send_initial_query() {
+void send_initial_query() { //VVV
   send_command(initialQuery, INITIALQUERYSIZE,CZTAW);
-  log_message("Requesting initial start query");
+  log_message(_F("Requesting initial start query"));
    if (heishamonSettings.logHexdump) logHex((char*) initialQuery, INITIALQUERYSIZE);
   delay(300);
 }
 /*****************************************************************************/
 /* Read raw from Serial2                                                      */
 /*****************************************************************************/
-void  readCzTaw()
+void  readCzTaw()   //
 {
   int cztaw_len = 0;
 	while ((Serial2.available()) and (cztaw_len <MAXDATASIZE)) {
     serial2_data[serial2_length+cztaw_len] = Serial2.read();
     cztaw_len ++;
     if ((serial2_data[0] != 0x71) and  (serial2_data[0] != 0x31) and  (serial2_data[0] != 0xF1)) {
-      log_message("CZTAW Received bad header. Ignoring this data!");
+      log_message(_F("CZTAW Received bad header. Ignoring this data!"));
       if (heishamonSettings.logHexdump) logHex(serial2_data, cztaw_len);
       serial2_length = 0;
       return; //return so this while loop does not loop forever if there happens to be a continous invalid data stream     
@@ -421,7 +436,7 @@ void  readCzTaw()
     if ((serial2_length > ( serial2_data[1] + 3)) || (serial2_length >= MAXDATASIZE)) {
       sprintf_P(log_msg, PSTR("CZTAW Received %i bytes serial2_data %i\n"), serial2_length, serial2_data[1]);
       log_message(log_msg);
-      log_message(F("CZTAW Received more data than header suggests! Ignoring this as this is bad data."));
+      log_message(_F("CZTAW Received more data than header suggests! Ignoring this as this is bad data."));
       if (heishamonSettings.logHexdump) logHex(serial2_data, serial2_length);
       serial2_length = 0;
       return;
@@ -430,34 +445,35 @@ void  readCzTaw()
     if (serial2_length == (serial2_data[1] + 3)) { //we received all data (serial2_data[1] is header length field)
       sprintf_P(log_msg, PSTR("CZTAW Received %i bytes serial2_data %i"), serial2_length, serial2_data[1]); log_message(log_msg);
       if (! isValidReceiveChecksum(serial2_data,serial2_length) ) {
-        log_message(F("CZTAW Checksum received false!"));
+        log_message(_F("CZTAW Checksum received false!"));
         serial2_length = 0; //for next attempt
         return;
       }
-      log_message(F("CZTAW Checksum and header received ok!"));
+      log_message(_F("CZTAW Checksum and header received ok!"));
       if ((serial2_data[0]==0x71 or serial2_data[0]==0xF1) and serial2_length == (PANASONICQUERYSIZE+1)) { //decode the normal data
-        log_message(F("CZTAW request to Heat Pump"));
+        log_message(_F("CZTAW request to Heat Pump"));
         if (heishamonSettings.logHexdump) logHex(serial2_data, serial2_length);
         send_command((byte*) serial2_data,serial2_length-1,CZTAW);
+        freshPumpAnswer=millis();//####ESP32
         serial2_length = 0;
         return;
       }
       else if (serial2_data[0]==0x71 and serial2_length == (OPTIONALPCBQUERYSIZE+1)) { //optional pcb acknowledge answer
-        log_message(F("CZTAW request to optional PCB . Decoding this in OPT topics."));
+        log_message(_F("CZTAW request to optional PCB . Decoding this in OPT topics."));
         if (heishamonSettings.logHexdump) logHex(serial2_data, serial2_length);
         send_command((byte*) serial2_data,serial2_length-1,CZTAW);
         serial2_length = 0;
         return;
       }
       else if (serial2_data[0]==0x31 and serial2_length == (INITIALQUERYSIZE+1)) { //init heat pump acknowledge answer
-        log_message(F("CZTAW INIT request ."));
+        log_message(_F("CZTAW INIT request ."));
         if (heishamonSettings.logHexdump) logHex(serial2_data, serial2_length);
-        send_initial_query();
+        send_command((byte*) serial2_data,serial2_length-1,CZTAW);
         serial2_length = 0;
         return;
       }
       else {
-        log_message(F("CZTAW Received a shorter datagram. Can't decode this yet."));
+        log_message(_F("CZTAW Received a shorter datagram. Can't decode this yet."));
         return;
       }
     }
@@ -471,7 +487,7 @@ bool readSerial1()
     data[data_length + len] = Serial1.read(); //read available data and place it after the last received data
     len++;
     if ((data[0] != 0x71) & (data[0] != 0x31)) { //wrong header received!
-      log_message("Received bad header. Ignoring this data!");
+      log_message(_F("Received bad header. Ignoring this data!"));
       if (heishamonSettings.logHexdump) logHex(data, len);
       badheaderread++;
       forward_cztaw=CZTAW_NOT;
@@ -486,7 +502,7 @@ bool readSerial1()
   if (data_length > 1) { //should have received length part of header now
 
     if ((data_length > (data[1] + 3)) || (data_length >= MAXDATASIZE) ) {
-      log_message(F("Received more data than header suggests! Ignoring this as this is bad data."));
+      log_message(_F("Received more data than header suggests! Ignoring this as this is bad data."));
       if (heishamonSettings.logHexdump) logHex(data, data_length);
       forward_cztaw=CZTAW_NOT;
       data_length = 0;
@@ -499,54 +515,74 @@ bool readSerial1()
       sending = false; //we received an answer after our last command so from now on we can start a new send request again
       if (heishamonSettings.logHexdump) logHex(data, data_length);
       if (! isValidReceiveChecksum(data,data_length) ) {
-        log_message(F("Checksum received false!"));
+        log_message(_F("Checksum received false!"));
         forward_cztaw=CZTAW_NOT;
         data_length = 0; //for next attempt
         badcrcread++;
         return false;
       }
-      log_message(F("Checksum and header received ok!"));
-      if (data_length == DATASIZE) { //decode the normal data
-        decode_heatpump_data(data, actData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
-        memcpy(actData, data, DATASIZE);
-        char mqtt_topic[256];
-        sprintf(mqtt_topic, "%s/raw/data", heishamonSettings.mqtt_topic_base);
-        mqtt_client.publish(mqtt_topic, (const uint8_t *)actData, DATASIZE, false); //do not retain this raw data
-        if(forward_cztaw) {
-          int bytesSent = Serial2.write(data, DATASIZE); //forward init answer to CZTAW
-          forward_cztaw=CZTAW_NOT;
-        }
-        data_length = 0;
+      log_message(_F("Checksum and header received ok!"));
         goodreads++;
-        return true;
+
+      if (data_length == DATASIZE)  {  //receive a full data block
+        if  (data[3] == 0x10) { //decode the normal data block
+          decode_heatpump_data(data, actData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
+          memcpy(actData, data, DATASIZE);
+          freshPumpAnswer=millis();//####ESP32
+          {
+            char mqtt_topic[256];
+            sprintf(mqtt_topic, "%s/raw/data", heishamonSettings.mqtt_topic_base);
+            mqtt_client.publish(mqtt_topic, (const uint8_t *)actData, DATASIZE, false); //do not retain this raw data
+            if(forward_cztaw) {//####ESP32
+              int bytesSent = Serial2.write(data, DATASIZE); ////####ESP32forward init answer to CZTAW
+              forward_cztaw=CZTAW_NOT;}//####ESP32
+          }
+          data_length = 0;
+          return true;
+        } else if (data[3] == 0x21) { //decode the new model extra data block
+          extraDataBlockAvailable = true; //set the flag to true so we know we can request this data always
+          decode_heatpump_data_extra(data, actDataExtra, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
+          memcpy(actDataExtra, data, DATASIZE);
+          {
+            char mqtt_topic[256];
+            sprintf(mqtt_topic, "%s/raw/dataextra", heishamonSettings.mqtt_topic_base);
+            mqtt_client.publish(mqtt_topic, (const uint8_t *)actDataExtra, DATASIZE, false); //do not retain this raw data
+          if(forward_cztaw) {//####ESP32
+            int bytesSent = Serial2.write(data, DATASIZE); ////####ESP32forward init answer to CZTAW
+            forward_cztaw=CZTAW_NOT;}//####ESP32
+          }
+          data_length = 0;
+          return true;        
+        } else {
+          log_message(_F("Received an unknown full size datagram. Can't decode this yet."));
+          data_length = 0;
+          return false;       
+        }
       }
       else if (data_length == OPTDATASIZE ) { //optional pcb acknowledge answer
-        log_message(F("Received optional PCB ack answer. Decoding this in OPT topics."));
+        log_message(_F("Received optional PCB ack answer. Decoding this in OPT topics."));
         decode_optional_heatpump_data(data, actOptData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
         memcpy(actOptData, data, OPTDATASIZE);
-        if(forward_cztaw) {
-          int bytesSent = Serial2.write(data, OPTDATASIZE); //forward init answer to CZTAW
-          forward_cztaw=CZTAW_NOT;
+        if(forward_cztaw) {//####ESP32
+          int bytesSent = Serial2.write(data, OPTDATASIZE); ////####ESP32forward init answer to CZTAW
+          forward_cztaw=CZTAW_NOT;//####ESP32
         }        
         data_length = 0;
-        goodreads++;
         return true;
       }
-      else if (data_length ==  INITIALQUEERYANSWERSIZE) { //init heat pump acknowledge answer
-        log_message("Received optional INIT ack answer. .");
-        memcpy(initialResponse, data,  INITIALQUEERYANSWERSIZE);
-        if (heishamonSettings.logHexdump) logHex(data,  INITIALQUEERYANSWERSIZE);
+      else if (data_length ==  INITIALQUEERYANSWERSIZE) { ////####ESP32init heat pump acknowledge answer
+        log_message(_F("Received optional INIT ack answer. ."));//####ESP32
+        memcpy(initialResponse, data,  INITIALQUEERYANSWERSIZE);//####ESP32
+        if (heishamonSettings.logHexdump) logHex(data,  INITIALQUEERYANSWERSIZE);//####ESP32
         if(forward_cztaw) {
-          int bytesSent = Serial2.write(data, INITIALQUEERYANSWERSIZE); //forward init answer to CZTAW
-          forward_cztaw=CZTAW_NOT;
-        }  
-        data_length = 0;
-        goodreads++;
-        return true;
-      }
+          int bytesSent = Serial2.write(data, INITIALQUEERYANSWERSIZE); ////####ESP32forward init answer to CZTAW
+          forward_cztaw=CZTAW_NOT;}//####ESP32
+        data_length = 0;//####ESP32
+        goodreads++;//####ESP32
+        return true;}//####ESP32
       else {
-        log_message(F("Received a shorter datagram. Can't decode this yet."));
-        forward_cztaw=CZTAW_NOT;
+        log_message(_F("Received a shorter datagram. Can't decode this yet."));
+        forward_cztaw=CZTAW_NOT;//####ESP32
 //        data_length = 0;
         return false;
       }
@@ -558,7 +594,7 @@ bool readSerial1()
 void popCommandBuffer() {
   // to make sure we can pop a command from the buffer
   if ((!sending) && cmdnrel > 0) {
-    forward_cztaw=cmdbuffer[cmdstart].source;
+    forward_cztaw=cmdbuffer[cmdstart].source;//####ESP32
     send_command(cmdbuffer[cmdstart].data, cmdbuffer[cmdstart].length, cmdbuffer[cmdstart].source);
     cmdstart = (cmdstart + 1) % (MAXCOMMANDSINBUFFER);
     cmdnrel--;
@@ -570,7 +606,7 @@ void popCommandBuffer() {
 // Callback function that is called when a message has been pushed to one of your topics.
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
   if (mqttcallbackinprogress) {
-    log_message("Already processing another mqtt callback. Ignoring this one");
+    log_message(_F("Already processing another mqtt callback. Ignoring this one"));
   }
   else {
     mqttcallbackinprogress = true; //simple semaphore to make sure we don't have two callbacks at the same time
@@ -588,11 +624,11 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 
       sprintf_P(log_msg, PSTR("sending raw value"));
       log_message(log_msg);
-      send_command(rawcommand, length,CZTAW_NOT);
+      send_command(rawcommand, length,CZTAW_NOT);//####ESP32
       free(rawcommand);
-    } else if (strncmp(topic_command, mqtt_topic_s0, 2) == 0)  // this is a s0 topic, check for watthour topic and restore it
+    } else if (strncmp(topic_command, mqtt_topic_s0, strlen(mqtt_topic_s0)) == 0)  // this is a s0 topic, check for watthour topic and restore it
     {
-      char* topic_s0_watthour_port = topic_command + 17; //strip the first 17 "s0/WatthourTotal/" from the topic to get the s0 port
+      char* topic_s0_watthour_port = topic_command + strlen(mqtt_topic_s0) + 15; //strip the first 17 "s0/WatthourTotal/" from the topic to get the s0 port
       int s0Port = String(topic_s0_watthour_port).toInt();
       float watthour = String(msg).toFloat();
       restore_s0_Watthour(s0Port, watthour);
@@ -600,25 +636,24 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
       char mqtt_topic[256];
       sprintf(mqtt_topic, "%s", topic);
       if (mqtt_client.unsubscribe(mqtt_topic)) {
-        log_message("Unsubscribed from S0 watthour restore topic");
+        log_message(_F("Unsubscribed from S0 watthour restore topic")); //####ESP32
       }
-    } else if (strncmp(topic_command, mqtt_topic_commands, 8) == 0)  // check for optional pcb commands
+    } else if (strncmp(topic_command, mqtt_topic_commands, strlen(mqtt_topic_commands)) == 0)  // check for commands to heishamon
     {
-      char* topic_sendcommand = topic_command + 9; //strip the first 9 "commands/" from the topic to get what we need
+      char* topic_sendcommand = topic_command + strlen(mqtt_topic_commands) + 1; //strip the first 9 "commands/" from the topic to get what we need
       send_heatpump_command(topic_sendcommand, msg, send_command, log_message, heishamonSettings.optionalPCB);
-    } else if (stricmp((char const *)topic, "panasonic_heat_pump/opentherm/Temperature") == 0) {
-      char cpy[length + 1];
-      memset(&cpy, 0, length + 1);
-      strncpy(cpy, (char *)payload, length);
-      openTherm[0] = cpy;
-      rules_event_cb("temperature");
-    } else if (stricmp((char const *)topic, "panasonic_heat_pump/opentherm/Setpoint") == 0) {
-      char cpy[length + 1];
-      memset(&cpy, 0, length + 1);
-      strncpy(cpy, (char *)payload, length);
-      openTherm[1] = cpy;
-
-      rules_event_cb("setpoint");
+    }
+    //use this to receive valid heishamon raw data from other heishamon to debug this OT code
+#ifdef OTDEBUG
+    else if (strcmp((char*)"panasonic_heat_pump/data", topic) == 0) {  // check for raw heatpump input
+      sprintf_P(log_msg, PSTR("Received raw heatpump data from MQTT"));
+      log_message(log_msg);
+      decode_heatpump_data(msg, actData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
+      memcpy(actData, msg, DATASIZE);
+#endif
+    } else if (strncmp(topic_command, mqtt_topic_opentherm, strlen(mqtt_topic_opentherm)) == 0)  {
+      char* topic_otcommand = topic_command + strlen(mqtt_topic_opentherm) + 1; //strip the opentherm subtopic from the topic
+      mqttOTCallback(topic_otcommand, msg);
     }
     mqttcallbackinprogress = false;
   }
@@ -644,16 +679,16 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
           client->route = 30;
         } else if (strcmp_P((char *)dat, PSTR("/debug")) == 0) {
           client->route = 40;
-          log_message("Debug URL requested");
+          log_message(_F("Debug URL requested"));
         } else if (strcmp_P((char *)dat, PSTR("/wifiscan")) == 0) {
           client->route = 50;
         } else if (strcmp_P((char *)dat, PSTR("/togglelog")) == 0) {
           client->route = 1;
-          log_message("Toggled mqtt log flag");
+          log_message(_F("Toggled mqtt log flag"));
           heishamonSettings.logMqtt ^= true;
         } else if (strcmp_P((char *)dat, PSTR("/togglehexdump")) == 0) {
           client->route = 1;
-          log_message("Toggled hexdump log flag");
+          log_message(_F("Toggled hexdump log flag"));
           heishamonSettings.logHexdump ^= true;
         } else if (strcmp_P((char *)dat, PSTR("/hotspot-detect.html")) == 0 ||
                    strcmp_P((char *)dat, PSTR("/fwlink")) == 0 ||
@@ -665,7 +700,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
           client->route = 90;
         } else if (strcmp_P((char *)dat, PSTR("/command")) == 0) {
           if ((client->userdata = malloc(1)) == NULL) {
-            Serial.printf(PSTR("Out of memory %s:#%d\n"), __FUNCTION__, __LINE__);
+            Serial.printf(PSTR("Out of memory %s:#%d\n"), __FUNCTION__, __LINE__);//####ESP32
             ESP.restart();
             exit(-1);
           }
@@ -692,7 +727,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                 client->route = 150;
               }
             } else {
-              Serial.println(PSTR("New firmware update client, while previous isn't finished yet! Assume broken connection, abort!"));
+              Serial.println(PSTR("New firmware update client, while previous isn't finished yet! Assume broken connection, abort!"));//####ESP32
               Update.end();
               return -1;
             }
@@ -721,6 +756,8 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                 client->route = 11;
               } else if (strcmp_P((char *)args->name, PSTR("s0")) == 0) {
                 client->route = 12;
+              } else if (strcmp_P((char *)args->name, PSTR("opentherm")) == 0) {
+                client->route = 13;
               }
             } break;
           case 100: {
@@ -738,14 +775,14 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                 if (strcmp((char *)args->name, tmp.name) == 0) {
                   len = tmp.func(cpy, cmd, log_msg);
                   if ((client->userdata = realloc(client->userdata, strlen((char *)client->userdata) + strlen(log_msg) + 2)) == NULL) {
-                    Serial.printf(PSTR("Out of memory %s:#%d\n"), __FUNCTION__, __LINE__);
+                    Serial.printf(PSTR("Out of memory %s:#%d\n"), __FUNCTION__, __LINE__);//####ESP32
                     ESP.restart();
                     exit(-1);
                   }
                   strcat((char *)client->userdata, log_msg);
                   strcat((char *)client->userdata, "\n");
                   log_message(log_msg);
-                  send_command(cmd, len,CZTAW_NOT);
+                  send_command(cmd, len,CZTAW_NOT);//####ESP32
                 }
               }
 
@@ -760,7 +797,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                   if (strcmp((char *)args->name, tmp.name) == 0) {
                     len = tmp.func(cpy, log_msg);
                     if ((client->userdata = realloc(client->userdata, strlen((char *)client->userdata) + strlen(log_msg) + 2)) == NULL) {
-                      Serial.printf(PSTR("Out of memory %s:#%d\n"), __FUNCTION__, __LINE__);
+                      Serial.printf(PSTR("Out of memory %s:#%d\n"), __FUNCTION__, __LINE__);//####ESP32
                       ESP.restart();
                       exit(-1);
                     }
@@ -769,18 +806,6 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                     log_message(log_msg);
                   }
                 }
-              }
-
-              if (stricmp((char const *)args->name, "temperature") == 0) {
-                char cpy[args->len + 1];
-                strcpy(cpy, (char *)args->value);
-                openTherm[0] = cpy;
-                rules_event_cb("temperature");
-              } else if (stricmp((char const *)args->name, "setpoint") == 0) {
-                char cpy[args->len + 1];
-                strcpy(cpy, (char *)args->value);
-                openTherm[1] = cpy;
-                rules_event_cb("setpoint");
               }
             } break;
           case 110: {
@@ -795,12 +820,12 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                   sprintf_P(log_msg, PSTR("Firmware MD5 expected: %s"), md5);
                   log_message(log_msg);
                   if (!Update.setMD5(md5)) {
-                    log_message("Failed to set expected update file MD5!");
+                    log_message(_F("Failed to set expected update file MD5!"));
                     Update.end(false);
                   }
                 } else if (strcmp((char *)args->name, "firmware") == 0) {
                   if (Update.write((uint8_t *)args->value, args->len) != args->len) {
-                    Update.printError(Serial);
+                    Update.printError(Serial);//####ESP32
                     Update.end(false);
                   } else {
                     if (uploadpercentage != (unsigned int)(((float)client->readlen / (float)client->totallen) * 20)) {
@@ -842,11 +867,12 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
             } break;
           case 10:
           case 11:
-          case 12: {
-              return handleTableRefresh(client, actData);
+          case 12:
+          case 13: {
+              return handleTableRefresh(client, actData, actDataExtra, extraDataBlockAvailable);
             } break;
           case 20: {
-              return handleJsonOutput(client, actData);
+              return handleJsonOutput(client, actData, actDataExtra, &heishamonSettings, extraDataBlockAvailable);
             } break;
           case 30: {
               return handleReboot(client);
@@ -875,8 +901,9 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
             } break;
           case 110: {
               int ret = saveSettings(client, &heishamonSettings);
-              if (heishamonSettings.listenonly) {
+              if ((!heishamonSettings.opentherm) && (heishamonSettings.listenonly)) {
                 //make sure we disable TX to heatpump-RX using the mosfet so this line is floating and will not disturb cz-taw1
+                //does not work for opentherm version currently
                 digitalWrite(5, LOW);
               } else {
                 digitalWrite(5, HIGH);
@@ -917,7 +944,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                   timerqueue_insert(2, 0, -2); // Start reboot sequence
                   return showFirmwareSuccess(client);
                 } else {
-                  Update.printError(Serial);
+                  Update.printError(Serial);//####ESP32
                   return showFirmwareFail(client);
                 }
               }
@@ -1011,21 +1038,22 @@ void setupHttp() {
 }
 
   void doubleResetDetect() {
-  if (drd->detectDoubleReset()) {
+  if (drd->detectDoubleReset()) {//####ESP32
     Serial.println("Double reset detected, clearing config."); //save to print on std serial because serial switch didn't happen yet
-    if(LittleFS.begin()) log_message("detectDoubleReset LITTLEFS opened OK");
+    LittleFS.begin();
     LittleFS.format();
-    LittleFS.begin(true);
-    delay(100); // must be
+    //create first boot file
+    File startupFile = LittleFS.open("/heishamon", "w");
+    startupFile.close();    
     WiFi.persistent(true);
     WiFi.disconnect();
     WiFi.persistent(false);
     Serial.println("Config cleared. Please reset to configure this device...");
     //initiate debug led indication for factory reset
    while (true) {
-      digitalWrite(LED_BUILTIN, HIGH); // ESP8266 digitalWrite(2, HIGH);
+      digitalWrite(LED_BUILTIN, HIGH); // ESP8266 digitalWrite(2, HIGH);//####ESP32
       delay(200);
-      digitalWrite(LED_BUILTIN, LOW); // ESP8266 digitalWrite(2, LOW);
+      digitalWrite(LED_BUILTIN, LOW); // ESP8266 digitalWrite(2, LOW);//####ESP32
       delay(200);
     }
 
@@ -1034,13 +1062,13 @@ void setupHttp() {
 
 void setupSerial() {
 
-  //esp32 has 3 Serial hardware port , HeishaMon_Both use Serial for monitor, Serial to HeatPump cn-cnt , Serial2 to cz-taw1
+  // esp32 has 3 Serial hardware port , HeishaMon_Both use Serial for monitor, Serial to HeatPump cn-cnt , Serial2 to cz-taw1
   // you can change Tx and Rx to any GPIO Serialx.begin(9600, SERIAL_8E1, Rx,Tx);
-  Serial.begin(115200,SERIAL_8N1,3,1); //initial Serial for monitoring
+  Serial.begin(115200,SERIAL_8N1,3,1); ////####ESP32initial Serial for monitoring
 
-  Serial1.begin(9600, SERIAL_8E1,27,26);    //Serial goes to cn-cnt in Panasonic Heat Pump, 
+  Serial1.begin(9600, SERIAL_8E1,27,26);    ////####ESP32Serial goes to cn-cnt in Panasonic Heat Pump, 
   Serial1.flush();
-  Serial2.begin(9600, SERIAL_8E1,16,17);    // Serial2 goes to cz-taw1, 
+  Serial2.begin(9600, SERIAL_8E1,16,17);    ////####ESP32Serial2 goes to cz-taw1, 
   Serial2.flush();
 }
 
@@ -1052,19 +1080,20 @@ void setupMqtt() {
   mqtt_client.setCallback(mqtt_callback);
 }
 void send_optionalpcb_query() {
-  log_message("Sending optional PCB data");
-  send_command(optionalPCBQuery, OPTIONALPCBQUERYSIZE,CZTAW_NOT);
+  log_message(_F("Sending optional PCB data"));
+  send_command(optionalPCBQuery, OPTIONALPCBQUERYSIZE,CZTAW_NOT);//####ESP32
 }
 
-
 void setupConditionals() {
+  //send_initial_query(); //maybe necessary but for now disable. CZ-TAW1 sends this query on boot
+
   //load optional PCB data from flash
   if (heishamonSettings.optionalPCB) {
     if (loadOptionalPCB(optionalPCBQuery, OPTIONALPCBQUERYSIZE)) {
-      log_message("Succesfully loaded optional PCB data from saved flash!");
+      log_message(_F("Succesfully loaded optional PCB data from saved flash!"));
     }
     else {
-      log_message("Failed to load optional PCB data from flash!");
+      log_message(_F("Failed to load optional PCB data from flash!"));
     }
     delay(1500); //need 1.5 sec delay before sending first datagram
     send_optionalpcb_query(); //send one datagram already at start
@@ -1086,6 +1115,9 @@ void timer_cb(int nr) {
       case -1: {
           LittleFS.begin();
           LittleFS.format();
+          //create first boot file
+          File startupFile = LittleFS.open("/heishamon", "w");
+          startupFile.close(); 
           WiFi.disconnect(true);
           timerqueue_insert(1, 0, -2);
         } break;
@@ -1096,11 +1128,11 @@ void timer_cb(int nr) {
           setupWifi(&heishamonSettings);
         } break;
       case -4: {
-          if (rules_parse("/rules.new") == -1) {
-            logprintln("new ruleset failed to parse, using previous ruleset");
-            rules_parse("/rules.txt");
+          if (rules_parse(_F("/rules.new")) == -1) {
+            logprintln(_F("new ruleset failed to parse, using previous ruleset"));
+            rules_parse(_F("/rules.txt"));
           } else {
-            logprintln("new ruleset successfully parsed");
+            logprintln(_F("new ruleset successfully parsed"));
             if (LittleFS.begin()) {
               LittleFS.rename("/rules.new", "/rules.txt");
             }
@@ -1113,13 +1145,30 @@ void timer_cb(int nr) {
 }
 
 void send_panasonic_query() {
-if(DEBUG_TEST) log_message("Requesting new panasonic data");
+if(DEBUG_TEST) log_message(_F("Requesting new panasonic data"));
+if (millis()-freshPumpAnswer>heishamonSettings.waitTime){//####ESP32
   send_command(panasonicQuery, PANASONICQUERYSIZE,CZTAW_NOT);
+  // rest is for the new data block on new models
+  if (extraDataBlockAvailable) {
+    log_message(_F("Requesting new panasonic extra data"));
+    panasonicQuery[3] = 0x21; //setting 4th byte to 0x21 is a request for extra block
+    send_command(panasonicQuery, PANASONICQUERYSIZE,CZTAW_NOT); //CZTAW_NOT ??????????????????????
+    panasonicQuery[3] = 0x10; //setting 4th back to 0x10 for normal data request next time
+  } else if (!extraDataBlockChecked) {
+    if ((actData[0] == 0x71) && (actData[193] == 0) ) { //do we have data but 0 value in heat consumptiom power, then assume K or L series
+      extraDataBlockChecked = true;
+      log_message(_F("Checking if connected heatpump has extra data"));
+      panasonicQuery[3] = 0x21;
+      send_command(panasonicQuery, PANASONICQUERYSIZE,CZTAW_NOT);  // CZTAW_NOT ???????????????????????
+      panasonicQuery[3] = 0x10;   
+    }
+  }
+}
 }
 
-void read_panasonic_data() {
+void read_panasonic_data() {    //VVV
   if (sending && ((unsigned long)(millis() - sendCommandReadTime) > SERIALTIMEOUT)) {
-    log_message("Previous read data attempt failed due to timeout!");
+    log_message(_F("Previous read data attempt failed due to timeout!"));
     if(DEBUG_TEST) sprintf_P (log_msg, PSTR("Received %d bytes data"), data_length);
     log_message(log_msg);
     if (heishamonSettings.logHexdump) logHex(data, data_length);
@@ -1186,12 +1235,12 @@ void setup() {
   drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
   //ESP8266 doubleResetDetect();
 
-  //initiate a wifi scan at boot to prefill the wifi scan json list
-  byte numSsid = WiFi.scanNetworks();
-  getWifiScanResults(numSsid);
-
   loadSettings(&heishamonSettings);
   drd->loop();
+  setupConditionals(); //setup for routines based on settings must run up to1.5 sec after power up
+    //initiate a wifi scan at boot to prefill the wifi scan json list
+  byte numSsid = WiFi.scanNetworks();
+  getWifiScanResults(numSsid);
   setupWifi(&heishamonSettings);
 
   setupMqtt();
@@ -1208,13 +1257,13 @@ void setup() {
   Serial.print("IP Address =");
   Serial.println(WiFi.localIP());
   Serial.println("________________________________________________________________");
-  setupConditionals(); //setup for routines based on settings
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer.start(DNS_PORT, "*", apIP);
 
   esp_reset_reason_t reset_reason = esp_reset_reason(); //  https://www.robmiles.com/journal/2021/1/10/esp-reset-message-strings
   Serial.printf(PSTR("Reset reason: %d\n"), reset_reason);
   listDir(LittleFS, "/", 1); 
+   Serial.printf(PSTR("Reset reason: %d\n"), reset_reason); //rimi 
   if (reset_reason > 0 && reset_reason < 4) {
     if (LittleFS.begin()) {
       LittleFS.rename("/rules.txt", "/rules.old");
@@ -1229,9 +1278,7 @@ void setup() {
 }
 
 void loop() {
-#define DEBUG_LOOP 1
   drd->loop();
-
   webserver_loop();
 
   // check wifi
@@ -1240,11 +1287,17 @@ void loop() {
   ArduinoOTA.handle();
 
   mqtt_client.loop();
+
+  if (heishamonSettings.opentherm) {
+    HeishaOTLoop(actData, mqtt_client, heishamonSettings.mqtt_topic_base);
+  }
+
   read_panasonic_data();
-  if (!sending and initialResponse[0]!=0x31)  send_initial_query();  // init command must be sent in listenonly mode also
-  readCzTaw();  
+
+  if (!sending and initialResponse[0]!=0x31)  send_initial_query();  ////####ESP32 init command must be sent in listenonly mode also
+  readCzTaw();//####ESP32
   if ((!sending) && (cmdnrel > 0)) { //check if there is a send command in the buffer
-    log_message("Sending command from buffer");
+    log_message(_F("Sending command from buffer"));
     popCommandBuffer();
   }
 
@@ -1255,6 +1308,14 @@ void loop() {
   if ((!sending) && (!heishamonSettings.listenonly) && (heishamonSettings.optionalPCB) && ((unsigned long)(millis() - lastOptionalPCBRunTime) > OPTIONALPCBQUERYTIME) ) {
     lastOptionalPCBRunTime = millis();
     send_optionalpcb_query();
+    if ((unsigned long)(millis() - lastOptionalPCBSave) > (1000 * OPTIONALPCBSAVETIME)) {  // only save each 5 minutes
+      lastOptionalPCBSave = millis();
+      if (saveOptionalPCB(optionalPCBQuery, OPTIONALPCBQUERYSIZE)) {
+        log_message((char*)"Succesfully saved optional PCB data to flash!");
+      } else {
+        log_message((char*)"Failed to save optional PCB data to flash!");
+      }
+    }
   }
 
   // run the data query only each WAITTIME
@@ -1263,7 +1324,7 @@ void loop() {
     //check mqtt
     if ( (WiFi.isConnected()) && (!mqtt_client.connected()) )
     {
-      log_message("Lost MQTT connection!");
+      log_message(_F("Lost MQTT connection!"));
       mqtt_reconnect();
     }
 
@@ -1278,9 +1339,9 @@ void loop() {
     message += F(" ## Free memory: ");
     message += getFreeMemory();
     message += F("% ## Heap fragmentation: ");
-    // esp32 missing message += ESP.getHeapFragmentation();
+    // esp32 missing message += ESP.getHeapFragmentation(); //####ESP32
     message += F("% ## Max free block: ");
-    //  esp32 missing message += ESP.getMaxFreeBlockSize();
+    // esp32 missing message += ESP.getMaxFreeBlockSize(); //####ESP32
     message += F(" bytes ## Free heap: ");
     message += ESP.getFreeHeap();
     message += F(" bytes ## Wifi: ");
@@ -1299,7 +1360,7 @@ void loop() {
     stats += F("{\"uptime\":");
     stats += String(millis());
     stats += F(",\"voltage\":");
-    //   esp32 missing stats += ESP.getVcc() / 1024.0;
+    //   esp32 missing stats += ESP.getVcc() / 1024.0; //####ESP32
     stats += F(",\"free memory\":");
     stats += getFreeMemory();
     stats += F(",\"free heap\":");
@@ -1322,7 +1383,9 @@ void loop() {
     stats += toolongread;
     stats += F(",\"timeout reads\":");
     stats += timeoutread;
-    stats += F("}");
+    stats += F(",\"version\":\"");
+    stats += heishamon_version;
+    stats += F("\"}");
     sprintf_P(mqtt_topic, PSTR("%s/stats"), heishamonSettings.mqtt_topic_base);
     mqtt_client.publish(mqtt_topic, stats.c_str(), MQTT_RETAIN_VALUES);
 
@@ -1334,7 +1397,7 @@ void loop() {
     mqtt_client.publish(mqtt_topic, "Online");
 
     if (WiFi.isConnected()) {
-// ESP8266     MDNS.announce();
+// ESP8266     MDNS.announce();//####ESP32
     }
   }
 
