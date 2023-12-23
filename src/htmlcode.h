@@ -1,7 +1,7 @@
 static const char webHeader[] PROGMEM  =
   "<!DOCTYPE html>"
   "<html>"
-  "<title>Heisha monitor BOTH</title>"//####ESP32
+  "<title>HeishaMonBoth</title>"//####ESP32
   "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
   "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">";
 
@@ -9,7 +9,7 @@ static const char refreshMeta[] PROGMEM = "<meta http-equiv=\"refresh\" content=
 static const char webBodyStart[] PROGMEM =
   "<body>"
   "<button class=\"w3-button w3-red w3-xlarge w3-left\" onclick=\"openLeftMenu()\">&#9776;</button>"
-  "<header class=\"w3-container w3-card w3-theme\"><h1>Heisha monitor BOTH</h1></header>";//####ESP32
+  "<header class=\"w3-container w3-card w3-theme\"><h1>HeishaMonBoth</h1></header>";//####ESP32
 
 static const char webFooter[] PROGMEM  = "</body></html>";
 static const char menuJS[] PROGMEM =
@@ -194,7 +194,7 @@ static const char webBodyRoot1[] PROGMEM =
   "<hr><div class=\"w3-text-grey\">Version: ";
 
 static const char webBodyRoot2[] PROGMEM =
-  "<br><a href=\"https://github.com/salakrzy/HeishaMonBoth\">HeishamonBoth software</a></div><hr></div>"//####ESP32
+  "<br><a href=\"https://github.com/salakrzy/HeishaMonBoth\">HeishaMonBoth software</a></div><hr></div>"//####ESP32
   "<div class=\"w3-bar w3-red\">"
   "<button class=\"w3-bar-item w3-button\" onclick=\"openTable('Heatpump')\">Heatpump</button>";
 

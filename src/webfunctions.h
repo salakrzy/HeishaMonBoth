@@ -48,7 +48,7 @@ struct settingsStruct {
   bool use_1wire = false; //1wire enabled?
   bool use_s0 = false; //s0 enabled?
   bool logMqtt = false; //log to mqtt from start
-  bool logHexdump = false; //log hexdump from start
+  bool logHexdump = true; //log hexdump from start
   bool logSerial = true; //log to serial1 (gpio2) from start
   bool opentherm = false; //opentherm enable flag
 
