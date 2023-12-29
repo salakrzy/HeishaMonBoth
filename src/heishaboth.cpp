@@ -40,7 +40,7 @@ DNSServer dnsServer;
 #include <ESP_DoubleResetDetector.h>
 // maximum number of seconds between resets that
 // counts as a double reset
-#define DRD_TIMEOUT 2
+#define DRD_TIMEOUT 2 
 
 // address to the block in the RTC user memory
 // change it if it collides with another usageb
@@ -193,9 +193,9 @@ void check_wifi()
     */
     if ((heishamonSettings.wifi_ssid[0] != '\0') && ((unsigned long)(millis() - lastWifiRetryTimer) > WIFIRETRYTIMER ) ) {
       lastWifiRetryTimer = millis();
-      if ((WiFi.softAPSSID() == "") or (WiFi.softAPSSID() !="HeishaMon-Setup")) { //####ESP32 set name soft AP ESP-XXXXXX not NULL
+      if ((WiFi.softAPSSID() == "") or (WiFi.softAPSSID() !="HeishaMonBoth-Setup")) { //####ESP32 set name soft AP ESP-XXXXXX not NULL
         log_message(_F("WiFi lost, starting setup hotspot..."));
-        WiFi.softAP((char*)"HeishaMon-Setup");
+        WiFi.softAP((char*)"HeishaMonBoth-Setup");
         Serial.println(WiFi.softAPSSID());
       }
       if ((WiFi.status() != WL_DISCONNECTED)  && (WiFi.softAPgetStationNum() == 0 )) {
@@ -1118,7 +1118,10 @@ void timer_cb(int nr) {
           //create first boot file
           File startupFile = LittleFS.open("/heishamon", "w");
           startupFile.close(); 
+          WiFi.persistent(true);
           WiFi.disconnect(true);
+          WiFi.persistent(false);
+          Serial.println("Config cleared. Please reset to configure this device...");
           timerqueue_insert(1, 0, -2);
         } break;
       case -2: {
@@ -1233,7 +1236,7 @@ void setup() {
   Serial.println("starting...........................");
   //double reset detect from start
   drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
-  //ESP8266 doubleResetDetect();
+  doubleResetDetect(); 
 
   loadSettings(&heishamonSettings);
   drd->loop();
@@ -1263,7 +1266,6 @@ void setup() {
   esp_reset_reason_t reset_reason = esp_reset_reason(); //  https://www.robmiles.com/journal/2021/1/10/esp-reset-message-strings
   Serial.printf(PSTR("Reset reason: %d\n"), reset_reason);
   listDir(LittleFS, "/", 1); 
-   Serial.printf(PSTR("Reset reason: %d\n"), reset_reason); //rimi 
   if (reset_reason > 0 && reset_reason < 4) {
     if (LittleFS.begin()) {
       LittleFS.rename("/rules.txt", "/rules.old");
@@ -1280,7 +1282,7 @@ void setup() {
 void loop() {
   drd->loop();
   webserver_loop();
-
+  if (digitalRead(0) == LOW) timerqueue_insert(1, 0, -1); // start Factory Reset procedure if jumper PROGRAM on the board is in close position
   // check wifi
   check_wifi();
   // Handle OTA first.
