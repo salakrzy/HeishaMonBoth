@@ -40,7 +40,7 @@ DNSServer dnsServer;
 #include <ESP_DoubleResetDetector.h>
 // maximum number of seconds between resets that
 // counts as a double reset
-#define DRD_TIMEOUT 2 
+#define DRD_TIMEOUT 0    //rimi
 
 // address to the block in the RTC user memory
 // change it if it collides with another usageb
@@ -1361,8 +1361,9 @@ void loop() {
     stats.reserve(384);
     stats += F("{\"uptime\":");
     stats += String(millis());
-    stats += F(",\"voltage\":");
-    //   esp32 missing stats += ESP.getVcc() / 1024.0; //####ESP32
+    stats += F(",\"voltage\":"); 
+    stats += 3.3;//####ESP32 set to 3.3 v static beacause ESP32 hasn't the getVcc() function
+    //esp32 missing stats += ESP.getVcc() / 1024.0; //####ESP32
     stats += F(",\"free memory\":");
     stats += getFreeMemory();
     stats += F(",\"free heap\":");

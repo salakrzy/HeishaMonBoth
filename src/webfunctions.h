@@ -34,10 +34,10 @@ struct settingsStruct {
   char wifi_password[65] = "";
   char wifi_hostname[40] = "HeishaMonBoth";
   char ota_password[40] = "heisha";
-  char mqtt_server[64];
+  char mqtt_server[64]= "";
   char mqtt_port[6] = "1883";
-  char mqtt_username[64];
-  char mqtt_password[64];
+  char mqtt_username[64]="";
+  char mqtt_password[64]="";
   char mqtt_topic_base[128] = "panasonic_heat_pump";
   char mqtt_topic_listen[128] = "master_panasonic_heat_pump";
   char ntp_servers[254] = "pool.ntp.org";
@@ -48,8 +48,8 @@ struct settingsStruct {
   bool use_1wire = false; //1wire enabled?
   bool use_s0 = false; //s0 enabled?
   bool logMqtt = false; //log to mqtt from start
-  bool logHexdump = true; //log hexdump from start
-  bool logSerial = true; //log to serial1 (gpio2) from start
+  bool logHexdump = false; //log hexdump from start
+  bool logSerial = false; //log to serial1 (gpio2) from start
   bool opentherm = false; //opentherm enable flag
 
   s0SettingsStruct s0Settings[NUM_S0_COUNTERS];

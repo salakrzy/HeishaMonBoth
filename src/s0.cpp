@@ -30,6 +30,7 @@ IRAM_ATTR void countPulse(int i) {
   /*
     if (allLastEdgeS0Index[i] < 20) {
     allLastEdgeS0[i][allLastEdgeS0Index[i]] = curPulseWidth;
+    allLastTimeS0[i][allLastEdgeS0Index[i]] = newEdgeS0;
     allLastEdgeS0Index[i]++;
     }
   */
@@ -48,8 +49,10 @@ IRAM_ATTR void countPulse(int i) {
     actS0Data[i].goodPulses++;
     actS0Data[i].avgPulseWidth = ((actS0Data[i].avgPulseWidth * (actS0Data[i].goodPulses - 1)) + curPulseWidth ) / actS0Data[i].goodPulses;
     badEdge[i] = false; //set it to false again to allow to count two bad edges as a new bad pulse because we know we had a good pulse now
-  } else {
-    if (badEdge[i]) actS0Data[i].badPulses++; //there was already an edge before so count this one as a bad pulse
+    } 
+  else if (lastEdgeS0[i] = newEdgeS0){}  // the  interupt called to fast 
+  else if (badEdge[i]){
+    actS0Data[i].badPulses++; //there was already an edge before so count this one as a bad pulse
     badEdge[i] = !badEdge[i]; //for now count it as a bad edge (if it is a edge for a good pulse, this will reset to false a few lines above). The bool is for not counting each edge as a bad pulse, but only two bad edges.
   }
   lastEdgeS0[i] = newEdgeS0; //store this edge time for next use
@@ -144,18 +147,18 @@ void s0Loop(PubSubClient &mqtt_client, void (*log_message)(char*), char* mqtt_to
       char valueStr[20];
 
       //debug
-      /*
-        noInterrupts();
+/*
+ //       noInterrupts();
         int j = 0;
         while (allLastEdgeS0Index[i] > 0) {
         allLastEdgeS0Index[i]--;
-        sprintf_P(log_msg, PSTR("Pulse widths seen on S0 port %d: Width: %lu"), (i + 1),  allLastEdgeS0[i][j] );
+        sprintf_P(log_msg, PSTR("Pulse widths seen on S0 port %d: Width: %lu                    time %lu"), (i + 1),  allLastEdgeS0[i][j] ,allLastTimeS0[i][j]);
         //log_message(log_msg);
         Serial.println(log_msg); //####ESP32
         j++;
         }
-        interrupts();
-      */
+ //       interrupts();
+*/
       //end debug
 
       sprintf_P(log_msg, PSTR("Pulses seen on S0 port %d: Good: %lu Bad: %lu Average good pulse width: %i"), (i + 1),  actS0Data[i].goodPulses, actS0Data[i].badPulses, actS0Data[i].avgPulseWidth);

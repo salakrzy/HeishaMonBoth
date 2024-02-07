@@ -102,6 +102,8 @@ void loop()
   Serial.flush();
 }
 
+
+      
 // pin 5 and 6 for S0 nas S1 counter check
 if ((millis()-czas)> 300){
   digitalWrite(5, HIGH);
