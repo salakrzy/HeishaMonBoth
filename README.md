@@ -1,6 +1,6 @@
 # HeishaMonBoth
 This is a HeishaMon modification allowing parallel work of Panasonic Web, local reading via MQTT and integration with HomeAssistant.
-Funtionality of this version fulfil the HeishaMon release v3.2
+Funtionality of this version fulfil the HeishaMon release v3.2.3
 This solution works on ESP32.
 This version of the software does support Dallas sensors and two S0 counters.
 Integration with HomeAssistant is identical to the original HeishaMon interface. https://github.com/kamaradclimber/heishamon-homeassistant/
@@ -12,6 +12,7 @@ In the /piotools directory there is a simple program HP_Panasonic_Simul.ino that
 
 Good Luck
 
+IMPORTANT !!!!!!! put your sensitive data to platformio_user_env_sample.ini and rename to platformio_user_env.ini
 
 Special thanks to :
 Igor Ybema https://github.com/Egyras/HeishaMon 

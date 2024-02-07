@@ -3,13 +3,14 @@
 #include "version.h"
 #include "htmlcode.h"
 #include "commands.h"
+#include "src/common/progmem.h"
 #include "src/common/webserver.h"
 #include "src/common/timerqueue.h"
 
 #include "lwip/apps/sntp.h"
 #include "lwip/dns.h"
 
-#include <WiFi.h>
+#include <WiFi.h>   //####ESP32
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 #include <time.h>
 
@@ -110,7 +111,7 @@ char *getUptime(void) {
 
   char *str = (char *)malloc(len + 2);
   if (str == NULL) {
-    Serial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    Serial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);   //####ESP32
     ESP.restart();
     exit(-1);
   }
@@ -120,7 +121,7 @@ char *getUptime(void) {
   return str;
 }
 
-void ntp_dns_found(const char *name, const ip_addr_t *addr, void *arg) {
+void ntp_dns_found(const char *name, const ip_addr_t *addr, void *arg) {   //####ESP32
   sntp_stop();
   sntp_setserver(ntpservers++, addr);
   sntp_init();
@@ -159,23 +160,23 @@ void ntpReload(settingsStruct *heishamonSettings) {
   sntp_stop();
   tzStruct tz;
   memcpy_P(&tz, &tzdata[heishamonSettings->timezone], sizeof(tz));
-  setenv("TZ",tz.value,1);
-  tzset();
+  setenv("TZ",tz.value,1);   //####ESP32
+  tzset();   //####ESP32
   sntp_init();
 }
 
 void loadSettings(settingsStruct *heishamonSettings) {
   //read configuration from FS json
-  log_message(F("mounting FS..."));
+  log_message(_F("mounting FS..."));
 
   if (LittleFS.begin()) {
-    log_message(F("mounted file system"));
+    log_message(_F("mounted file system"));
     if (LittleFS.exists("/config.json")) {
       //file exists, reading and loading
-      log_message(F("reading config file"));
+      log_message(_F("reading config file"));
       File configFile = LittleFS.open("/config.json", "r");
       if (configFile) {
-        log_message(F("opened config file"));
+        log_message(_F("opened config file"));
         size_t size = configFile.size();
         // Allocate a buffer to store contents of the file.
         std::unique_ptr<char[]> buf(new char[size]);
@@ -183,17 +184,18 @@ void loadSettings(settingsStruct *heishamonSettings) {
         configFile.readBytes(buf.get(), size);
         DynamicJsonDocument jsonDoc(1024);
         DeserializationError error = deserializeJson(jsonDoc, buf.get());
-        char log_msg[512];
+        char log_msg[1024];
         serializeJson(jsonDoc, log_msg);
         log_message(log_msg);
         if (!error) {
-          log_message(F("parsed json"));
+          log_message(_F("parsed json"));
           //read updated parameters, make sure no overflow
           if ( jsonDoc["wifi_ssid"] ) strncpy(heishamonSettings->wifi_ssid, jsonDoc["wifi_ssid"], sizeof(heishamonSettings->wifi_ssid));
           if ( jsonDoc["wifi_password"] ) strncpy(heishamonSettings->wifi_password, jsonDoc["wifi_password"], sizeof(heishamonSettings->wifi_password));
           if ( jsonDoc["wifi_hostname"] ) strncpy(heishamonSettings->wifi_hostname, jsonDoc["wifi_hostname"], sizeof(heishamonSettings->wifi_hostname));
           if ( jsonDoc["ota_password"] ) strncpy(heishamonSettings->ota_password, jsonDoc["ota_password"], sizeof(heishamonSettings->ota_password));
           if ( jsonDoc["mqtt_topic_base"] ) strncpy(heishamonSettings->mqtt_topic_base, jsonDoc["mqtt_topic_base"], sizeof(heishamonSettings->mqtt_topic_base));
+          if ( jsonDoc["mqtt_topic_listen"] ) strncpy(heishamonSettings->mqtt_topic_listen, jsonDoc["mqtt_topic_listen"], sizeof(heishamonSettings->mqtt_topic_listen));
           if ( jsonDoc["mqtt_server"] ) strncpy(heishamonSettings->mqtt_server, jsonDoc["mqtt_server"], sizeof(heishamonSettings->mqtt_server));
           if ( jsonDoc["mqtt_port"] ) strncpy(heishamonSettings->mqtt_port, jsonDoc["mqtt_port"], sizeof(heishamonSettings->mqtt_port));
           if ( jsonDoc["mqtt_username"] ) strncpy(heishamonSettings->mqtt_username, jsonDoc["mqtt_username"], sizeof(heishamonSettings->mqtt_username));
@@ -203,10 +205,12 @@ void loadSettings(settingsStruct *heishamonSettings) {
           heishamonSettings->use_1wire = ( jsonDoc["use_1wire"] == "enabled" ) ? true : false;
           heishamonSettings->use_s0 = ( jsonDoc["use_s0"] == "enabled" ) ? true : false;
           heishamonSettings->listenonly = ( jsonDoc["listenonly"] == "enabled" ) ? true : false;
+          heishamonSettings->listenmqtt = ( jsonDoc["listenmqtt"] == "enabled" ) ? true : false;
           heishamonSettings->logMqtt = ( jsonDoc["logMqtt"] == "enabled" ) ? true : false;
           heishamonSettings->logHexdump = ( jsonDoc["logHexdump"] == "enabled" ) ? true : false;
-          heishamonSettings->logSerial = ( jsonDoc["logSerial"] == "enabled" ) ? true : false;
+          heishamonSettings->logSerial = ( jsonDoc["logSerial"] == "enabled" ) ? true : false;   //####ESP32
           heishamonSettings->optionalPCB = ( jsonDoc["optionalPCB"] == "enabled" ) ? true : false;
+          heishamonSettings->opentherm = ( jsonDoc["opentherm"] == "enabled" ) ? true : false;
           if ( jsonDoc["waitTime"]) heishamonSettings->waitTime = jsonDoc["waitTime"];
           if (heishamonSettings->waitTime < 5) heishamonSettings->waitTime = 5;
           if ( jsonDoc["waitDallasTime"]) heishamonSettings->waitDallasTime = jsonDoc["waitDallasTime"];
@@ -229,7 +233,7 @@ void loadSettings(settingsStruct *heishamonSettings) {
           if (jsonDoc["s0_2_maxpulsewidth"]) heishamonSettings->s0Settings[1].maximalPulseWidth = jsonDoc["s0_2_maxpulsewidth"];
           ntpReload(heishamonSettings);
         } else {
-          log_message(F("Failed to load json config, forcing config reset."));
+          log_message(_F("Failed to load json config, forcing config reset."));
           WiFi.persistent(true);
           WiFi.disconnect();
           WiFi.persistent(false);
@@ -238,13 +242,13 @@ void loadSettings(settingsStruct *heishamonSettings) {
       }
     }
     else {
-      log_message(F("No config.json exists! Forcing a config reset."));
+      log_message(_F("No config.json exists! Forcing a config reset."));
       WiFi.persistent(true);
       WiFi.disconnect();
       WiFi.persistent(false);
     }
   } else {
-    log_message(F("failed to mount FS"));
+    log_message(_F("failed to mount FS"));
   }
   //end read
 
@@ -252,7 +256,7 @@ void loadSettings(settingsStruct *heishamonSettings) {
 
 void setupWifi(settingsStruct *heishamonSettings) {
   #define D_SET_WIFI true
-  log_message(F("Wifi reconnecting with new configuration**********"));
+  log_message(_F("Wifi reconnecting with new configuration**********"));
   if(D_SET_WIFI){
     log_e("START setupWiFi Status= %i Mode= %i  IP= ",WiFi.status(),WiFi.getMode());
     Serial.println(WiFi.localIP());
@@ -271,7 +275,7 @@ void setupWifi(settingsStruct *heishamonSettings) {
     Serial.println(WiFi.localIP());
   }
   if (heishamonSettings->wifi_ssid[0] != '\0') {
-     log_message(F("Wifi client mode..."));
+     log_message(_F("Wifi client mode..."));
     if (heishamonSettings->wifi_password[0] == '\0') {
         WiFi.begin(heishamonSettings->wifi_ssid);
       } else {
@@ -296,11 +300,11 @@ void setupWifi(settingsStruct *heishamonSettings) {
       if(D_SET_WIFI) log_e("WiFi Status= %i",WiFi.status());
   }
   else {
-    log_message(F("Wifi hotspot mode..."));
+    log_message(_F("Wifi hotspot mode..."));
         if(D_SET_WIFI) log_e("GetMode = %i \n",WiFi.getMode());
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0)); 
         if(D_SET_WIFI) log_e("GetMode = %i \n",WiFi.getMode());
-    WiFi.softAP(F("HeishaMon-Setup"));
+    WiFi.softAP(_F("HeishaMonBoth-Setup"));
     if(D_SET_WIFI){
       log_e("START setupWiFi Status= %i Mode= %i  IP= ",WiFi.status(),WiFi.getMode());
       Serial.println(WiFi.softAPIP());
@@ -309,7 +313,7 @@ void setupWifi(settingsStruct *heishamonSettings) {
 
   if (heishamonSettings->wifi_hostname[0] == '\0') {
     //Set hostname on wifi rather than ESP_xxxxx
-    WiFi.hostname(F("HeishaMon"));
+    WiFi.hostname(_F("HeishaMonBoth"));
   } else {
     WiFi.hostname(heishamonSettings->wifi_hostname);
   }
@@ -370,6 +374,7 @@ void settingsToJson(DynamicJsonDocument &jsonDoc, settingsStruct *heishamonSetti
   jsonDoc["wifi_ssid"] = heishamonSettings->wifi_ssid;
   jsonDoc["ota_password"] = heishamonSettings->ota_password;
   jsonDoc["mqtt_topic_base"] = heishamonSettings->mqtt_topic_base;
+  jsonDoc["mqtt_topic_listen"] = heishamonSettings->mqtt_topic_listen;
   jsonDoc["mqtt_server"] = heishamonSettings->mqtt_server;
   jsonDoc["mqtt_port"] = heishamonSettings->mqtt_port;
   jsonDoc["mqtt_username"] = heishamonSettings->mqtt_username;
@@ -389,6 +394,11 @@ void settingsToJson(DynamicJsonDocument &jsonDoc, settingsStruct *heishamonSetti
   } else {
     jsonDoc["listenonly"] = "disabled";
   }
+  if (heishamonSettings->listenmqtt) {
+    jsonDoc["listenmqtt"] = "enabled";
+  } else {
+    jsonDoc["listenmqtt"] = "disabled";
+  }
   if (heishamonSettings->logMqtt) {
     jsonDoc["logMqtt"] = "enabled";
   } else {
@@ -399,15 +409,20 @@ void settingsToJson(DynamicJsonDocument &jsonDoc, settingsStruct *heishamonSetti
   } else {
     jsonDoc["logHexdump"] = "disabled";
   }
-  if (heishamonSettings->logSerial) {
-    jsonDoc["logSerial"] = "enabled";
+  if (heishamonSettings->logSerial) {   //####ESP32
+    jsonDoc["logSerial"] = "enabled";   //####ESP32
   } else {
-    jsonDoc["logSerial"] = "disabled";
+    jsonDoc["logSerial"] = "disabled";   //####ESP32
   }
   if (heishamonSettings->optionalPCB) {
     jsonDoc["optionalPCB"] = "enabled";
   } else {
     jsonDoc["optionalPCB"] = "disabled";
+  }
+  if (heishamonSettings->opentherm) {
+    jsonDoc["opentherm"] = "enabled";
+  } else {
+    jsonDoc["opentherm"] = "disabled";
   }
   jsonDoc["waitTime"] = heishamonSettings->waitTime;
   jsonDoc["waitDallasTime"] = heishamonSettings->waitDallasTime;
@@ -440,10 +455,12 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
   settingsToJson(jsonDoc, heishamonSettings); //stores current settings in a json document
 
   jsonDoc["listenonly"] = String("");
+  jsonDoc["listenmqtt"] = String("");
   jsonDoc["logMqtt"] = String("");
   jsonDoc["logHexdump"] = String("");
-  jsonDoc["logSerial"] = String("");
+  jsonDoc["logSerial"] = String("");   //####ESP32
   jsonDoc["optionalPCB"] = String("");
+  jsonDoc["opentherm"] = String("");
   jsonDoc["use_1wire"] = String("");
   jsonDoc["use_s0"] = String("");
 
@@ -453,6 +470,8 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
       jsonDoc["wifi_hostname"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "mqtt_topic_base") == 0) {
       jsonDoc["mqtt_topic_base"] = tmp->value;
+    } else if (strcmp(tmp->name.c_str(), "mqtt_topic_listen") == 0) {
+      jsonDoc["mqtt_topic_listen"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "mqtt_server") == 0) {
       jsonDoc["mqtt_server"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "mqtt_port") == 0) {
@@ -470,14 +489,18 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
       }
     } else if (strcmp(tmp->name.c_str(), "listenonly") == 0) {
       jsonDoc["listenonly"] = tmp->value;
+    } else if (strcmp(tmp->name.c_str(), "listenmqtt") == 0) {
+      jsonDoc["listenmqtt"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "logMqtt") == 0) {
       jsonDoc["logMqtt"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "logHexdump") == 0) {
       jsonDoc["logHexdump"] = tmp->value;
-    } else if (strcmp(tmp->name.c_str(), "logSerial") == 0) {
-      jsonDoc["logSerial"] = tmp->value;
+    } else if (strcmp(tmp->name.c_str(), "logSerial") == 0) {   //####ESP32
+      jsonDoc["logSerial"] = tmp->value;      //####ESP32
     } else if (strcmp(tmp->name.c_str(), "optionalPCB") == 0) {
       jsonDoc["optionalPCB"] = tmp->value;
+    } else if (strcmp(tmp->name.c_str(), "opentherm") == 0) {
+      jsonDoc["opentherm"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "ntp_servers") == 0) {
       jsonDoc["ntp_servers"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "timezone") == 0) {
@@ -598,7 +621,7 @@ int cacheSettings(struct webserver_t *client, struct arguments_t * args) {
   if (tmp == NULL) {
     websettings_t *node = new websettings_t;
     if (node == NULL) {
-      Serial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+      Serial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);   //####ESP32
       ESP.restart();
       exit(-1);
     }
@@ -607,7 +630,7 @@ int cacheSettings(struct webserver_t *client, struct arguments_t * args) {
     if (args->value != NULL) {
       char *cpy = (char *)malloc(args->len + 1);
       if (node == NULL) {
-        Serial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+        Serial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);   //####ESP32
         ESP.restart();
         exit(-1);
       }
@@ -728,7 +751,17 @@ int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings) {
       } break;
     case 6: {
         char str[20];
-        webserver_send_content_P(client, PSTR(",\"logMqtt\":"), 11);
+        webserver_send_content_P(client, PSTR(",\"listenmqtt\":"), 14);
+
+        itoa(heishamonSettings->listenmqtt, str, 10);
+        webserver_send_content(client, str, strlen(str));
+
+        webserver_send_content_P(client, PSTR(",\"mqtt_topic_listen\":\""), 22);
+        webserver_send_content(client, heishamonSettings->mqtt_topic_listen, strlen(heishamonSettings->mqtt_topic_listen));
+      } break;
+    case 7: {
+        char str[20];
+        webserver_send_content_P(client, PSTR("\",\"logMqtt\":"), 12);
 
         itoa(heishamonSettings->logMqtt, str, 10);
         webserver_send_content(client, str, strlen(str));
@@ -738,31 +771,31 @@ int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings) {
         itoa(heishamonSettings->logHexdump, str, 10);
         webserver_send_content(client, str, strlen(str));
       } break;
-    case 7: {
+    case 8: {
         char str[20];
-        webserver_send_content_P(client, PSTR(",\"logSerial\":"), 13);
-
+        webserver_send_content_P(client, PSTR(",\"logSerial\":"), 13);    //####ESP32
         itoa(heishamonSettings->logSerial, str, 9);
         webserver_send_content(client, str, strlen(str));
 
         webserver_send_content_P(client, PSTR(",\"optionalPCB\":"), 15);
-
         itoa(heishamonSettings->optionalPCB, str, 10);
         webserver_send_content(client, str, strlen(str));
+
+        webserver_send_content_P(client, PSTR(",\"opentherm\":"), 13);
+        itoa(heishamonSettings->opentherm, str, 10);
+        webserver_send_content(client, str, strlen(str));
       } break;
-    case 8: {
+    case 9: {
         char str[20];
         webserver_send_content_P(client, PSTR(",\"use_1wire\":"), 13);
-
         itoa(heishamonSettings->use_1wire, str, 10);
         webserver_send_content(client, str, strlen(str));
 
         webserver_send_content_P(client, PSTR(",\"waitDallasTime\":"), 18);
-
         itoa(heishamonSettings->waitDallasTime, str, 10);
         webserver_send_content(client, str, strlen(str));
       } break;
-    case 9: {
+    case 10: {
         char str[20];
         webserver_send_content_P(client, PSTR(",\"updataAllDallasTime\":"), 23);
 
@@ -774,7 +807,7 @@ int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings) {
         itoa(heishamonSettings->dallasResolution , str, 10);
         webserver_send_content(client, str, strlen(str));
       } break;
-    case 10: {
+    case 11: {
         char str[20];
         webserver_send_content_P(client, PSTR(",\"use_s0\":"), 10);
 
@@ -816,7 +849,7 @@ int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings) {
 
         webserver_send_content_P(client, PSTR(",\"s0_2_gpio\":"), 13);
       } break;
-    case 11: {
+    case 12: {
         char str[20];
         int i = 1;
 
@@ -887,7 +920,7 @@ int handleWifiScan(struct webserver_t *client) {
   }
   //initatie a new async scan for next try
 // ESP8266   WiFi.scanNetworksAsync(getWifiScanResults);
-  WiFi.scanNetworks(true,getWifiScanResults);
+  WiFi.scanNetworks(true,getWifiScanResults);    //####ESP32
   return 0;
 }
 
@@ -947,6 +980,9 @@ int handleRoot(struct webserver_t *client, float readpercentage, int mqttReconne
         if (heishamonSettings->use_s0) {
           webserver_send_content_P(client, webBodyRootS0Tab, strlen_P(webBodyRootS0Tab));
         }
+        if (heishamonSettings->opentherm) {
+          webserver_send_content_P(client, webBodyRootOpenthermTab, strlen_P(webBodyRootOpenthermTab));
+        }
         webserver_send_content_P(client, webBodyRootConsoleTab, strlen_P(webBodyRootConsoleTab));
       } break;
     case 2: {
@@ -988,6 +1024,9 @@ int handleRoot(struct webserver_t *client, float readpercentage, int mqttReconne
         if (heishamonSettings->use_s0) {
           webserver_send_content_P(client, webBodyRootS0Values, strlen_P(webBodyRootS0Values));
         }
+        if (heishamonSettings->opentherm) {
+          webserver_send_content_P(client, webBodyRootOpenthermValues, strlen_P(webBodyRootOpenthermValues));
+        }
         webserver_send_content_P(client, webBodyRootConsole, strlen_P(webBodyRootConsole));
         webserver_send_content_P(client, menuJS, strlen_P(menuJS));
       } break;
@@ -1001,9 +1040,9 @@ int handleRoot(struct webserver_t *client, float readpercentage, int mqttReconne
   return 0;
 }
 
-int handleTableRefresh(struct webserver_t *client, char* actData) {
+int handleTableRefresh(struct webserver_t *client, char* actData, char* actDataExtra, bool extraDataBlockAvailable) {
   int ret = 0;
-
+  int extraTopics = extraDataBlockAvailable ? NUMBER_OF_TOPICS_EXTRA : 0; //set to 0 if there is no datablock so we don't run table data for it
   if (client->route == 11) {
     if (client->content == 0) {
       webserver_send(client, 200, (char *)"text/html", 0);
@@ -1013,6 +1052,11 @@ int handleTableRefresh(struct webserver_t *client, char* actData) {
     if (client->content == 0) {
       webserver_send(client, 200, (char *)"text/html", 0);
       s0TableOutput(client);
+    }
+  } else if (client->route == 13) {
+    if (client->content == 0) {
+      webserver_send(client, 200, (char *)"text/html", 0);
+      openthermTableOutput(client);
     }
   } else if (client->route == 10) {
     if (client->content == 0) {
@@ -1053,20 +1097,62 @@ int handleTableRefresh(struct webserver_t *client, char* actData) {
         }
 
         webserver_send_content_P(client, PSTR("</td></tr>"), 10);
+        client->content++;
       }
-      // The webserver also increases by 1
-      client->content += 3;
+      client->content--; // The webserver also increases by 1
+    } else if (client->content - NUMBER_OF_TOPICS < extraTopics ) {
+      for (uint8_t topic = client->content  - NUMBER_OF_TOPICS ; topic < extraTopics && topic < (client->content - NUMBER_OF_TOPICS + 4 ); topic++) {
+
+        webserver_send_content_P(client, PSTR("<tr><td>XTOP"), 12);
+
+        char str[12];
+        itoa(topic, str, 10);
+        webserver_send_content(client, str, strlen(str));
+
+        webserver_send_content_P(client, PSTR("</td><td>"), 9);
+        webserver_send_content_P(client, xtopics[topic], strlen_P(xtopics[topic]));
+        webserver_send_content_P(client, PSTR("</td><td>"), 9);
+
+        {
+          String dataValue = actData[0] == '\0' ? "" : getDataValueExtra(actDataExtra, topic);
+          char* str = (char *)dataValue.c_str();
+          webserver_send_content(client, str, strlen(str));
+        }
+
+        webserver_send_content_P(client, PSTR("</td><td>"), 9);
+
+        int maxvalue = atoi(xtopicDescription[topic][0]);
+        int value = actData[0] == '\0' ? 0 : getDataValueExtra(actDataExtra, topic).toInt();
+        if (maxvalue == 0) { //this takes the special case where the description is a real value description instead of a mode, so value should take first index (= 0 + 1)
+          value = 0;
+        }
+        if ((value < 0) || (value > maxvalue)) {
+          webserver_send_content_P(client, _unknown, strlen_P(_unknown));
+        }
+        else {
+          webserver_send_content_P(client, xtopicDescription[topic][value + 1], strlen_P(xtopicDescription[topic][value + 1]));
+
+        }
+
+        webserver_send_content_P(client, PSTR("</td></tr>"), 10);
+        client->content++;
+      }
+      client->content--; // The webserver also increases by 1
     }
+
   }
   return 0;
 }
 
-int handleJsonOutput(struct webserver_t *client, char* actData) {
+
+
+int handleJsonOutput(struct webserver_t *client, char* actData, char* actDataExtra, settingsStruct *heishamonSettings, bool extraDataBlockAvailable) {
+  int extraTopics = extraDataBlockAvailable ? NUMBER_OF_TOPICS_EXTRA : 0; //set to 0 if there is no datablock so we don't run json data for it
   if (client->content == 0) {
     webserver_send(client, 200, (char *)"application/json", 0);
     webserver_send_content_P(client, PSTR("{\"heatpump\":["), 13);
-  } else if (client->content < NUMBER_OF_TOPICS) {
-    for (uint8_t topic = client->content - 1; topic < NUMBER_OF_TOPICS && topic < client->content + 4 ; topic++) {
+  } else if ((client->content - 1) < NUMBER_OF_TOPICS) {
+    for (uint8_t topic = client->content - 1; topic < NUMBER_OF_TOPICS && topic < client->content + 4 ; topic++) {  //5 TOPS per webserver run (because content was 1 at start, so makes 5)
 
       webserver_send_content_P(client, PSTR("{\"Topic\":\"TOP"), 13);
 
@@ -1107,25 +1193,76 @@ int handleJsonOutput(struct webserver_t *client, char* actData) {
       if (topic < NUMBER_OF_TOPICS - 1) {
         webserver_send_content_P(client, PSTR(","), 1);
       }
+      client->content++;
     }
-    // The webserver also increases by 4
-    client->content += 4;
-    if (client->content > NUMBER_OF_TOPICS) {
-      client->content = NUMBER_OF_TOPICS;
+    client->content--; // The webserver also increases by 1
+  } else if ((client->content - NUMBER_OF_TOPICS - 1) < extraTopics) {
+    if (client->content == NUMBER_OF_TOPICS + 1) {
+      webserver_send_content_P(client, PSTR("],\"heatpump extra\":["), 20);
     }
-  } else if (client->content == NUMBER_OF_TOPICS + 1) {
-    webserver_send_content_P(client, PSTR("],\"1wire\":"), 10);
+    for (uint8_t topic = (client->content - NUMBER_OF_TOPICS - 1); topic < extraTopics && topic < (client->content - NUMBER_OF_TOPICS + 4) ; topic++) {
 
-    dallasJsonOutput(client);
-  } else if (client->content == NUMBER_OF_TOPICS + 2) {
-    webserver_send_content_P(client, PSTR(",\"s0\":"), 6);
+      webserver_send_content_P(client, PSTR("{\"Topic\":\"XTOP"), 14);
 
-    s0JsonOutput(client);
+      {
+        char str[12];
+        itoa(topic, str, 10);
+        webserver_send_content(client, str, strlen(str));
+      }
 
+      webserver_send_content_P(client, PSTR("\",\"Name\":\""), 10);
+
+      webserver_send_content_P(client, xtopics[topic], strlen_P(xtopics[topic]));
+
+      webserver_send_content_P(client, PSTR("\",\"Value\":\""), 11);
+
+      {
+        String dataValue = getDataValueExtra(actDataExtra, topic);
+        char* str = (char *)dataValue.c_str();
+        webserver_send_content(client, str, strlen(str));
+      }
+
+      webserver_send_content_P(client, PSTR("\",\"Description\":\""), 17);
+
+      int maxvalue = atoi(xtopicDescription[topic][0]);
+      int value = actDataExtra[0] == '\0' ? 0 : getDataValueExtra(actDataExtra, topic).toInt();
+      if (maxvalue == 0) { //this takes the special case where the description is a real value description instead of a mode, so value should take first index (= 0 + 1)
+        value = 0;
+      }
+      if ((value < 0) || (value > maxvalue)) {
+        webserver_send_content_P(client, _unknown, strlen_P(_unknown));
+      }
+      else {
+        webserver_send_content_P(client, xtopicDescription[topic][value + 1], strlen_P(xtopicDescription[topic][value + 1]));
+      }
+
+      webserver_send_content_P(client, PSTR("\"}"), 2);
+
+      if (topic < (extraTopics - 1)) {
+        webserver_send_content_P(client, PSTR(","), 1);
+      }
+      client->content++;
+    }
+    client->content--; // The webserver also increases by 1
+  } else if (client->content == (NUMBER_OF_TOPICS + extraTopics + 1)) {
+    webserver_send_content_P(client, PSTR("]"), 1);
+    if (heishamonSettings->use_1wire) {
+      webserver_send_content_P(client, PSTR(",\"1wire\":"), 9);
+      dallasJsonOutput(client);
+    }
+    if (heishamonSettings->use_s0 ) {
+      webserver_send_content_P(client, PSTR(",\"s0\":"), 6);
+      s0JsonOutput(client);
+    }
+    if (heishamonSettings->opentherm) {
+      webserver_send_content_P(client, PSTR(",\"opentherm\":"), 13);
+      openthermJsonOutput(client);
+    }
     webserver_send_content_P(client, PSTR("}"), 1);
   }
   return 0;
 }
+
 
 int showRules(struct webserver_t *client) {
   uint16_t len = 0, len1 = 0;
@@ -1162,11 +1299,11 @@ int showRules(struct webserver_t *client) {
 
       if (len1 > 0) {
         webserver_send_content(client, content, len1);
-        if (len1 < BUFFER_SIZE) {
+        if (len1 < BUFFER_SIZE || client->content * BUFFER_SIZE == len) {
           if (f) {
             if (*f) {
               f->close();
-            }
+            } 
             delete f;
           }
           client->userdata = NULL;
@@ -1253,18 +1390,18 @@ static void printUpdateError(char **out, uint8_t size) {
 #endif
   } else if (Update.getError() == UPDATE_ERROR_MD5) {
     snprintf_P(&(*out)[len], size - len, PSTR("MD5 Failed\n"));
-  } else if (Update.getError() == UPDATE_ERROR_MAGIC_BYTE) {
-    snprintf_P(&(*out)[len], size - len, PSTR("Wrong Magic Byte, not 0xE9"));
-  } else if (Update.getError() == UPDATE_ERROR_ACTIVATE) {
-    snprintf_P(&(*out)[len], size - len, PSTR("Could Not Activate The Firmwaren"));
-  } else if (Update.getError() == UPDATE_ERROR_NO_PARTITION) {
-    snprintf_P(&(*out)[len], size - len, PSTR("Partition Could Not be Found"));
-  } else if (Update.getError() == UPDATE_ERROR_BAD_ARGUMENT) {
-    snprintf_P(&(*out)[len], size - len, PSTR("Bad Argument"));
-  } else if (Update.getError() == UPDATE_ERROR_ABORT) {
-    snprintf_P(&(*out)[len], size - len, PSTR("Aborted , Invalid bootstrapping state, reset ESP32 before updating"));
-  } else {
-    snprintf_P(&(*out)[len], size - len, PSTR("UNKNOWN"));
+  } else if (Update.getError() == UPDATE_ERROR_MAGIC_BYTE) {   //####ESP32
+    snprintf_P(&(*out)[len], size - len, PSTR("Wrong Magic Byte, not 0xE9"));   //####ESP32
+  } else if (Update.getError() == UPDATE_ERROR_ACTIVATE) {   //####ESP32
+    snprintf_P(&(*out)[len], size - len, PSTR("Could Not Activate The Firmwaren"));   //####ESP32
+  } else if (Update.getError() == UPDATE_ERROR_NO_PARTITION) {   //####ESP32
+    snprintf_P(&(*out)[len], size - len, PSTR("Partition Could Not be Found"));   //####ESP32
+  } else if (Update.getError() == UPDATE_ERROR_BAD_ARGUMENT) {   //####ESP32
+    snprintf_P(&(*out)[len], size - len, PSTR("Bad Argument"));   //####ESP32
+  } else if (Update.getError() == UPDATE_ERROR_ABORT) {   //####ESP32
+    snprintf_P(&(*out)[len], size - len, PSTR("Aborted , Invalid bootstrapping state, reset ESP32 before updating"));   //####ESP32
+  } else {   //####ESP32
+    snprintf_P(&(*out)[len], size - len, PSTR("UNKNOWN"));   //####ESP32
   }
 }
 /* ESP8266
@@ -1282,6 +1419,7 @@ static void printUpdateError(char **out, uint8_t size) {
     snprintf_P(&(*out)[len], size - len, PSTR("UNKNOWN"));
   }
 }*/
+
 
 int showFirmwareFail(struct webserver_t *client) {
   if (client->content == 0) {

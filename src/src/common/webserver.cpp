@@ -2047,12 +2047,12 @@ uint8_t webserver_sync_receive(struct webserver_t *client, uint8_t *rbuffer, uin
           if(http_parse_body(client, (char *)rbuffer, size) == -1) {
             client->step = WEBSERVER_CLIENT_CLOSE;
           }
-        } else if(client->reqtype == 1) {
+         } else if(client->reqtype == 1) {
           client->substep = 0;
           if(http_parse_multipart_body(client, (unsigned char *)rbuffer, size) == -1) {
             client->step = WEBSERVER_CLIENT_CLOSE;
           }
-        }
+         }
 
         if(client->readlen == client->totallen) {
           client->step = WEBSERVER_CLIENT_WRITE;
@@ -2081,13 +2081,13 @@ uint8_t webserver_sync_receive(struct webserver_t *client, uint8_t *rbuffer, uin
         client->step = WEBSERVER_CLIENT_CLOSE;
       }
     }
-    if((client->readlen+2000) > client->totallen) {
-        char log_msg[256];
-        sprintf_P(log_msg, "Readlen: %d, Totallen: %d", client->readlen, client->totallen);
-		log_message(log_msg);
-    }
     if(client->readlen == client->totallen) {
       client->step = WEBSERVER_CLIENT_WRITE;
+    }
+    if((client->readlen + 2000) > client->totallen) {
+        char log_msg[256];
+        sprintf_P(log_msg, "Reaching end of read. Readlen: %d, Totallen: %d", client->readlen, client->totallen);
+		log_message(log_msg);
     }
   }
   return 0;
@@ -2265,7 +2265,7 @@ err_t webserver_client(void *arg, tcp_pcb *pcb, err_t err) {
       sprintf_P(log_msg, PSTR("New webserver client: %s:%d"), IPAddress(clients[i].data.pcb->remote_ip.u_addr.ip4.addr).toString().c_str(), clients[i].data.pcb->remote_port);
       log_message(log_msg);
 
-      tcp_nagle_disable(pcb);
+      //tcp_nagle_disable(pcb);
       tcp_recv(pcb, &webserver_async_receive);
       tcp_sent(pcb, &webserver_sent);
       tcp_poll(pcb, &webserver_poll, 1);

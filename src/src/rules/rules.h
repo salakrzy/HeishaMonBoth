@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-#ifndef ESP32
+#ifndef ESP32//####ESP32
   #define F
   #define MEMPOOL_SIZE 16000
   typedef struct pbuf {
@@ -61,28 +61,65 @@ typedef enum {
   TCOMMA = 11,
   TIF = 12,
   TELSE = 13,
-  TTHEN = 14,
-  TEVENT = 15,
-  TCEVENT = 16,
-  TEND = 17,
-  TVAR = 18,
-  TASSIGN = 19,
-  TSEMICOLON = 20,
-  TTRUE = 21,
-  TFALSE = 22,
-  TSTART = 23,
-  VCHAR = 24,
-  VINTEGER = 25,
-  VFLOAT = 26,
-  VNULL = 27,
+  TELSEIF = 14,
+  TTHEN = 15,
+  TEVENT = 16,
+  TCEVENT = 17,
+  TEND = 18,
+  TVAR = 19,
+  TASSIGN = 20,
+  TSEMICOLON = 21,
+  TTRUE = 22,
+  TFALSE = 23,
+  TSTART = 24,
+  VCHAR = 25,
+  VINTEGER = 26,
+  VFLOAT = 27,
+  VNULL = 28,
 } token_types;
+
+#ifdef DEBUG
+struct {
+  const char *name;
+} token_names[] = {
+  "",
+  "TOPERATOR",
+  "TFUNCTION",
+  "TSTRING",
+  "TNUMBER",
+  "TNUMBER1",
+  "TNUMBER2",
+  "TNUMBER3",
+  "TEOF",
+  "LPAREN",
+  "RPAREN",
+  "TCOMMA",
+  "TIF",
+  "TELSE",
+  "TELSEIF",
+  "TTHEN",
+  "TEVENT",
+  "TCEVENT",
+  "TEND",
+  "TVAR",
+  "TASSIGN",
+  "TSEMICOLON",
+  "TTRUE",
+  "TFALSE",
+  "TSTART",
+  "VCHAR",
+  "VINTEGER",
+  "VFLOAT",
+  "VNULL",
+};
+#endif
 
 typedef struct rules_t {
   unsigned short nr;
 
   struct {
-#if defined(DEBUG) or defined(ESP32)
-  #ifdef ESP32
+#if defined(DEBUG) or defined(ESP32)//####ESP32
+  #ifdef ESP32//####ESP32
       unsigned long first;
       unsigned long second;
   #else
