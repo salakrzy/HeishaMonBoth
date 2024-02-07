@@ -12,6 +12,7 @@ In the /piotools directory there is a simple program HP_Panasonic_Simul.ino that
 
 Good Luck
 
+IMPORTANT !!!!!!! put your sensitive data to platformio_user_env_sample.ini and rename to platformio_user_env.ini
 
 Special thanks to :
 Igor Ybema https://github.com/Egyras/HeishaMon 
