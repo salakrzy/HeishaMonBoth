@@ -21,8 +21,8 @@ void log_message(char* string);
 static IPAddress apIP(192, 168, 4, 1);
 
 struct settingsStruct {
-  uint16_t waitTime = 5; // how often data is read from heatpump
-  uint16_t waitDallasTime = 5; // how often temps are read from 1wire
+  uint16_t waitTime = 30; // how often data is read from heatpump
+  uint16_t waitDallasTime = 30; // how often temps are read from 1wire
   uint16_t dallasResolution = 12; // dallas temp resolution (9 to 12)
   uint16_t updateAllTime = 300; // how often all data is resend to mqtt
   uint16_t updataAllDallasTime = 300; //how often all 1wire data is resent to mqtt
@@ -47,9 +47,9 @@ struct settingsStruct {
   bool optionalPCB = false; //do we emulate an optional PCB?
   bool use_1wire = false; //1wire enabled?
   bool use_s0 = false; //s0 enabled?
-  bool logMqtt = false; //log to mqtt from start
+  bool logMqtt = true; //log to mqtt from start
   bool logHexdump = false; //log hexdump from start
-  bool logSerial = false; //log to serial1 (gpio2) from start
+  bool logSerial = true; //log to serial1 (gpio2) from start
   bool opentherm = false; //opentherm enable flag
 
   s0SettingsStruct s0Settings[NUM_S0_COUNTERS];

@@ -1,11 +1,10 @@
 .cache
+.git
 .pio
 .pioenvs
 .vscode
 doc_tmp
 tmp work
-build
-.piolibdeps
 .DS_Store
 .clang_complete
 .gcc-flags.json
@@ -14,3 +13,4 @@ include
 firmware.map
 extensions.json
 platformio_user_env.ini
+HMB.code-workspace
