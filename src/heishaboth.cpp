@@ -40,7 +40,7 @@ DNSServer dnsServer;
 #include <ESP_DoubleResetDetector.h>
 // maximum number of seconds between resets that
 // counts as a double reset
-#define DRD_TIMEOUT 0    //rimi
+#define DRD_TIMEOUT 0    //####ESP32
 
 // address to the block in the RTC user memory
 // change it if it collides with another usageb
@@ -486,7 +486,7 @@ bool readSerial1()
   while ((Serial1.available()) && (len <= MAXDATASIZE)) {
     data[data_length + len] = Serial1.read(); //read available data and place it after the last received data
     len++;
-    if ((data[0] != 0x71) & (data[0] != 0x31)) { //wrong header received!
+    if ((data[0] != 0x71) and (data[0] != 0x31) and (data[0] != 0xF1)) { //wrong header received!
       log_message(_F("Received bad header. Ignoring this data!"));
       if (heishamonSettings.logHexdump) logHex(data, len);
       badheaderread++;
