@@ -1,12 +1,17 @@
 #define LWIP_INTERNAL
 
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiGratuitous.h>
+#elif defined(ESP32)
 #include <WiFi.h>
-//#include <ESP8266WiFiGratuitous.h>
+#include <ETH.h>
+#include <SPI.h>
+#include <Update.h>
+#endif
 #include <PubSubClient.h>
-#include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
-#include <Update.h>   // aded for ESP32
 #include "src/common/webserver.h"
 #include "dallas.h"
 #include "s0.h"
@@ -21,8 +26,8 @@ void log_message(char* string);
 static IPAddress apIP(192, 168, 4, 1);
 
 struct settingsStruct {
-  uint16_t waitTime = 30; // how often data is read from heatpump
-  uint16_t waitDallasTime = 30; // how often temps are read from 1wire
+  uint16_t waitTime = 10; // how often data is read from heatpump
+  uint16_t waitDallasTime = 10; // how often temps are read from 1wire
   uint16_t dallasResolution = 12; // dallas temp resolution (9 to 12)
   uint16_t updateAllTime = 300; // how often all data is resend to mqtt
   uint16_t updataAllDallasTime = 300; //how often all 1wire data is resent to mqtt
@@ -34,10 +39,10 @@ struct settingsStruct {
   char wifi_password[65] = "";
   char wifi_hostname[40] = "HeishaMonBoth";
   char ota_password[40] = "heisha";
-  char mqtt_server[64]= "";
+  char mqtt_server[65];
   char mqtt_port[6] = "1883";
-  char mqtt_username[64]="";
-  char mqtt_password[64]="";
+  char mqtt_username[65];
+  char mqtt_password[65];
   char mqtt_topic_base[128] = "panasonic_heat_pump";
   char mqtt_topic_listen[128] = "master_panasonic_heat_pump";
   char ntp_servers[254] = "pool.ntp.org";
@@ -47,11 +52,14 @@ struct settingsStruct {
   bool optionalPCB = false; //do we emulate an optional PCB?
   bool use_1wire = false; //1wire enabled?
   bool use_s0 = false; //s0 enabled?
-  bool logMqtt = true; //log to mqtt from start
+  bool logMqtt = false; //log to mqtt from start
   bool logHexdump = false; //log hexdump from start
-  bool logSerial = true; //log to serial1 (gpio2) from start
+  bool logSerial1 = true; //log to serial1 (gpio2) from start
   bool opentherm = false; //opentherm enable flag
-
+  bool hotspot = true; //enable wifi hotspot when wifi is not connected
+#ifdef ESP32
+  bool proxy = true; //cztaw proxy port enable flag
+#endif
   s0SettingsStruct s0Settings[NUM_S0_COUNTERS];
   gpioSettingsStruct gpioSettings;
 };
@@ -74,13 +82,12 @@ void log_message(char *string);
 int8_t webserver_cb(struct webserver_t *client, void *data);
 void getWifiScanResults(int numSsid);
 int handleRoot(struct webserver_t *client, float readpercentage, int mqttReconnects, settingsStruct *heishamonSettings);
-int handleTableRefresh(struct webserver_t *client, char* actData, char* actDataExtra, bool extraDataBlockAvailable);
-int handleJsonOutput(struct webserver_t *client, char* actData, char* actDataExtra, settingsStruct *heishamonSettings, bool extraDataBlockAvailable);
+int handleJsonOutput(struct webserver_t *client, char* actData, char* actDataExtra, char* actOptData, settingsStruct *heishamonSettings, bool extraDataBlockAvailable);
 int handleFactoryReset(struct webserver_t *client);
 int handleReboot(struct webserver_t *client);
 int handleDebug(struct webserver_t *client, char *hex, byte hex_len);
-void settingsToJson(DynamicJsonDocument &jsonDoc, settingsStruct *heishamonSettings);
-void saveJsonToConfig(DynamicJsonDocument &jsonDoc);
+void settingsToJson(JsonDocument  &jsonDoc, settingsStruct *heishamonSettings);
+void saveJsonToFile(JsonDocument  &jsonDoc, const char *filename);
 void loadSettings(settingsStruct *heishamonSettings);
 int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings);
 int handleSettings(struct webserver_t *client);
@@ -89,7 +96,6 @@ int settingsReconnectWifi(struct webserver_t *client, settingsStruct *heishamonS
 int settingsNewPassword(struct webserver_t *client, settingsStruct *heishamonSettings);
 int cacheSettings(struct webserver_t *client, struct arguments_t * args);
 int handleWifiScan(struct webserver_t *client);
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length);
 int showRules(struct webserver_t *client);
 int showFirmware(struct webserver_t *client);
 int showFirmwareSuccess(struct webserver_t *client);
