@@ -20,10 +20,16 @@ extern PubSubClient mqtt_client;
 extern const char* mqtt_logtopic;
 
 void _logprintln(const char *file, unsigned int line, char *msg) {
-  if(heishamonSettings.logSerial) {
+  if(heishamonSettings.logSerial1) {
+#if defined(ESP8266)
+    Serial1.print(millis());
+    Serial1.print(": ");
+    Serial1.println(msg);
+#elif defined(ESP32)
     Serial.print(millis());
     Serial.print(": ");
     Serial.println(msg);
+#endif	  
   }
   websocket_write_all(msg, strlen(msg));
 }

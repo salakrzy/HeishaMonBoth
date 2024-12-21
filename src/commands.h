@@ -1,17 +1,16 @@
 #define LWIP_INTERNAL
 
-#include <WiFi.h>//####ESP32
 #include <ArduinoJson.h>
 
 #define DATASIZE 203
+
 #define INITIALQUERYSIZE 7
-#define  INITIALQUEERYANSWERSIZE 51
 extern byte initialQuery[INITIALQUERYSIZE];
 #define PANASONICQUERYSIZE 110
 extern byte panasonicQuery[PANASONICQUERYSIZE];
-#define CZTAW_NOT 0
 
 
+#define OPTDATASIZE 20
 #define OPTIONALPCBQUERYTIME 1000 //send optional pcb query each second
 #define OPTIONALPCBQUERYSIZE 19
 #define OPTIONALPCBSAVETIME 300 //save each 5 minutes the current optional pcb state into flash to have valid values during reboot
@@ -60,6 +59,10 @@ unsigned int set_external_pad_heater(char *msg, unsigned char *cmd, char *log_ms
 unsigned int set_buffer_delta(char *msg, unsigned char *cmd, char *log_msg);
 unsigned int set_buffer(char *msg, unsigned char *cmd, char *log_msg);
 unsigned int set_heatingoffoutdoortemp(char *msg, unsigned char *cmd, char *log_msg);
+unsigned int set_gpio16state(char *msg, unsigned char *cmd, char *log_msg);
+unsigned int set_bivalent_mode(char *msg, unsigned char *cmd, char *log_msg);
+unsigned int set_bivalent_start_temperature(char *msg, unsigned char *cmd, char *log_msg);
+unsigned int set_bivalent_stop_temperature(char *msg, unsigned char *cmd, char *log_msg);
 
 //optional pcb commands
 unsigned int set_heat_cool_mode(char *msg, char *log_msg);
@@ -111,6 +114,12 @@ const cmdStruct commands[] PROGMEM = {
   { "SetPowerfulMode", set_powerful_mode },
   // set Heat pump operation mode  3 = DHW only, 0 = heat only, 1 = cool only, 2 = Auto, 4 = Heat+DHW, 5 = Cool+DHW, 6 = Auto + DHW
   { "SetOperationMode", set_operation_mode },
+  // set Bivalent operation mode  0 = Off, 1 = Alternativ, 2 = A-Off, 3 = Parallel, 4 = P-Off, 5 = Parallel Advanced
+  { "SetBivalentMode", set_bivalent_mode },
+  // bivalent start temp -  set from -15C to 35C 
+  { "SetBivalentStartTemperature", set_bivalent_start_temperature },
+  // bivalent stop temp -  set from -15C to 35C
+  { "SetBivalentStopTemperature", set_bivalent_stop_temperature },
   // set DHW temperature by sending desired temperature between 40C-75C
   { "SetDHWTemp", set_DHW_temp },
   // set heat/cool curves on z1 and z2 using a json input
@@ -131,6 +140,7 @@ const cmdStruct commands[] PROGMEM = {
   { "SetBuffer", set_buffer },
   // set Outdoor Temperature to stop heating 5-35
   { "SetHeatingOffOutdoorTemp", set_heatingoffoutdoortemp },
+  { "SetGPIO16State", set_gpio16state },
 };
 
 struct optCmdStruct{
@@ -156,6 +166,6 @@ const optCmdStruct optionalCommands[] PROGMEM = {
   { "SetOptPCBByte9", set_byte_9 }
 };
 
-void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int,int), void (*log_message)(char*), bool optionalPCB);//####ESP32
+void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB);
 bool saveOptionalPCB(byte* command, int length);
 bool loadOptionalPCB(byte* command, int length);

@@ -205,6 +205,45 @@ unsigned int set_z2_cool_request_temperature(char *msg, unsigned char *cmd, char
   return sizeof(panasonicSendQuery);
 }
 
+unsigned int set_bivalent_start_temperature(char *msg, unsigned char *cmd, char *log_msg) {
+
+  String set_temperature_string(msg);
+
+  byte request_temp = set_temperature_string.toInt() + 128;
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set bivalent start temperature to %d"), request_temp - 128 );
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[66] = request_temp;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+unsigned int set_bivalent_stop_temperature(char *msg, unsigned char *cmd, char *log_msg) {
+
+  String set_temperature_string(msg);
+
+  byte request_temp = set_temperature_string.toInt() + 128;
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set bivalent stop temperature to %d"), request_temp - 128 );
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[68] = request_temp;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
 unsigned int set_force_DHW(char *msg, unsigned char *cmd, char *log_msg) {
 
   String set_force_DHW_string(msg);
@@ -367,10 +406,46 @@ unsigned int set_operation_mode(char *msg, unsigned char *cmd, char *log_msg) {
   return sizeof(panasonicSendQuery);
 }
 
+unsigned int set_bivalent_mode(char *msg, unsigned char *cmd, char *log_msg) {
+
+  String set_bmode_string(msg);
+
+  byte set_bmode;
+  switch (set_bmode_string.toInt()) {
+    case 0: set_bmode = 100; break;
+    case 1: set_bmode = 101; break;
+    case 2: set_bmode = 104; break;
+    case 3: set_bmode = 105; break;
+    case 4: set_bmode = 108; break;
+    case 5: set_bmode = 109; break;
+    case 100: set_bmode = 100; break;
+    case 101: set_bmode = 101; break;
+    case 104: set_bmode = 104; break;
+    case 105: set_bmode = 105; break;
+    case 108: set_bmode = 108; break;
+    case 109: set_bmode = 109; break;
+    default: set_bmode = 100; break;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set bivalent mode to %d"), set_bmode);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[26] = set_bmode + 1;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
 unsigned int set_curves(char *msg, unsigned char *cmd, char *log_msg) {
   memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
 
-  StaticJsonDocument<512> jsonDoc;
+//chnge to compatibile JsonDocument jsonDoc;
+  DynamicJsonDocument jsonDoc(512);
   DeserializationError error = deserializeJson(jsonDoc, msg);
   if (!error) {
     char tmpmsg[256] = { 0 };
@@ -682,7 +757,6 @@ unsigned int set_buffer(char *msg, unsigned char *cmd, char *log_msg) {
   }
 
   return sizeof(panasonicSendQuery);
- 
 }
 
 unsigned int set_heatingoffoutdoortemp(char *msg, unsigned char *cmd, char *log_msg) {
@@ -704,6 +778,28 @@ unsigned int set_heatingoffoutdoortemp(char *msg, unsigned char *cmd, char *log_
 
   return sizeof(panasonicSendQuery);
   
+}
+
+//special command for gpio control
+unsigned int set_gpio16state(char *msg, unsigned char *cmd, char *log_msg) {
+  byte request_state;
+  String set_gpio16state_string(msg);
+
+  if ( set_gpio16state_string.toInt() == 1 ) {
+    request_state = 1;
+    digitalWrite(16, HIGH);
+  } else {
+    request_state = 0;
+    digitalWrite(16, LOW);
+  }
+  
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set gpio16 state to  %d"), request_state);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+  
+  return 0; // do nothing
 }
 
 //start of optional pcb commands
@@ -854,11 +950,10 @@ unsigned int set_solar_temp(char *msg, char *log_msg) {
 
 
 
-void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int,int), void (*log_message)(char*), bool optionalPCB) {//####ESP32
+void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB) {
   unsigned char cmd[256] = { 0 };
   char log_msg[256] = { 0 };
   unsigned int len = 0;
-  unsigned int source = 0;  ////####ESP32 rimi source 0 means MQTT requests
 
   for (unsigned int i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
     cmdStruct tmp;
@@ -866,7 +961,7 @@ void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, i
     if (strcmp(topic, tmp.name) == 0) {
       len = tmp.func(msg, cmd, log_msg);
       log_message(log_msg);
-      send_command(cmd, len,source);//####ESP32
+      if (len > 0) send_command(cmd, len);
     }
   }
 
