@@ -10,7 +10,7 @@ I decided to redesign the PCB and adjust the program code. The new PCB has e few
 The program code is adapted to the change of the board and has fixes for the stability of work.
 In the /piotools directory there is a simple program HP_Panasonic_Simul.ino that can be uploaded e. g. on Arduino Nano for test.
 
-#Good Luck
+# Good Luck
 
 IMPORTANT !!!!!!! put your sensitive data to platformio_user_env_sample.ini and rename to platformio_user_env.ini
 
