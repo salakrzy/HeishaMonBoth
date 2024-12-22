@@ -6,10 +6,11 @@ The S0 and S1 Counters  (GPIO 22 and 23) are Schmitt triggered.\
 
 ## Upgrade from old versions
 New firmware is  backward compatible with the previous PCB version. You can install version 3.8 on the previous PCB version, of cource the functionalities requiring access to the added GPIOs will not be available.\
-After upgrading firmware to version 3_8 , you should short the "boot" pins for 10 seconds to delete the old configuration settings file. Switch power off, leave boot jumper and after power restart, the new configuration file will be created with a structure compatible with firmware version 3_8 . The boot jumper you can see at the [picture](https://github.com/salakrzy/HeishaMonBoth/blob/main/Doc/Board%20set%20in%20Boot%20or%20Reset%20mode.jpg) in Doc directory.
+After upgrading firmware to version 3_8 , you should short the "boot" pins for 10 seconds to delete the old configuration settings file. Switch power off, leave boot jumper and after power restart, the new configuration file will be created with a structure compatible with firmware version 3_8 . The boot jumper you can see at the [picture](https://github.com/salakrzy/HeishaMonBoth/blob/main/Doc/Board%20set%20in%20Boot%20or%20Reset%20mode.jpg) in Doc directory.\
+You can delete old configuration also from the Settings web page, selecting Factory Reset option.\
 The new file has default parameter settings so you should configure the board again according to your settings.
 ## Reset configration
-If you have problem with WiFi setting after e.g. replace router you can reset the old configuration in this same way.
+If you have problem with WiFi setting after e.g. replace router you can reset the old configuration in this same way. 
 
 
 ## Version 3_8 supports 13 new model configurations
