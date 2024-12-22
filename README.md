@@ -41,7 +41,7 @@ If you have problem with WiFi setting after e.g. replace router you can reset th
   "2_Zone_mixing_valve_1_opening",//TOP125\
   "2_Zone_mixing_valve_2_opening",//TOP126
 ## Home Assistant 
-This version is compatible with ver 3.7 HA Integration [kamaradclimber](https://github.com/kamaradclimber/heishamon-homeassistant)
+This version is compatible with ver 1.13.7 HA Integration [kamaradclimber](https://github.com/kamaradclimber/heishamon-homeassistant)
 ## RJ45 Ethernet functionality
 The 3.8 version support [W5500](https://github.com/salakrzy/HeishaMonBoth/blob/main/Doc/Connecting%20%20W5500%20Ethernet%20module.PNG) module to connetct via RJ45 ethernet cable network\
 //W5500 ETH pins	-->	ESP32 GPIO\
