@@ -58,7 +58,7 @@ The 3.8 version support [W5500](https://github.com/salakrzy/HeishaMonBoth/blob/m
 Some ESP32 processor versions have only 1 core instead of 2. You have to pay attention to this because the HeishaMonBoth software requires 2 processors. I bought a 1-core processor and wasted some time trying to figure out why the board resets on startup.\
 OpenTherm and Optional PCB and Rules features should work but havn't been tested.\
 Oficial published Librrary OneWire has the error in file **OneWire_direct_gpio.h** It is described there https://github.com/PaulStoffregen/OneWire/pull/134/commits/da50f912a8282dacf381d006e75e0141df2a931c) \
-I recomend use the file from direcotry .pio\libdeps\UART_HMBoth_v3_8\OneWire\util. To awoid problem with librrarry wersions the best way could be copy all .pio directory into your project 
+I recomend use the file **OneWire_direct_gpio.h** from direcotry OneWire\util. 
 
 
 
