@@ -1,0 +1,107 @@
+This is descri
+https://codebeautify.org/json-deserialize-online
+https://codebeautify.org/json-serialize-online
+
+{
+  "addrstart": 0,				Address first register to read
+  "numb_registers": 59,			Number registers to read -1
+  "mqttTopic": "L3F1946-P6",	Counter name / topic on MQTT server
+  "datasize1": 4,				Number byter to read one register
+  "devAddress": 5,				Modbus counter address 
+  "Value0": {					can not be changed
+    "address": 0,				register number in readed counter answer
+    "divider": 1,				value divader
+    "unit": "V",				Value 
+    "name": "VoltageA"			Value name
+  },
+  "Value1": {
+    "address": 1,
+    "divider": 1,
+    "unit": "V",
+    "name": "VoltageB"
+  },
+  "Value2": {
+    "address": 2,
+    "divider": 1,
+    "unit": "V",
+    "name": "VoltageC"
+  },
+  "Value3": {
+    "address": 3,
+    "divider": 1,
+    "unit": "V",
+    "name": "VoltageAB"
+  },
+  "Value4": {
+    "address": 4,
+    "divider": 1,
+    "unit": "V",
+    "name": "VoltageAC"
+  },
+  "Value5": {
+    "address": 5,
+    "divider": 1,
+    "unit": "V",
+    "name": "VoltageBC"
+  },
+  "Value6": {
+    "address": 6,
+    "divider": 1,
+    "unit": "A",
+    "name": "CurrentA"
+  },
+  "Value7": {
+    "address": 7,
+    "divider": 1,
+    "unit": "A",
+    "name": "CurrentB"
+  },
+  "Value8": {
+    "address": 8,
+    "divider": 1,
+    "unit": "A",
+    "name": "CurrentC"
+  },
+  "Value9": {
+    "address": 21,
+    "divider": 1,
+    "unit": "W",
+    "name": "PowerA"
+  },
+  "Value10": {
+    "address": 22,
+    "divider": 1,
+    "unit": "kW",
+    "name": "PowerB"
+  },
+  "Value11": {
+    "address": 23,
+    "divider": 1,
+    "unit": "kW",
+    "name": "PowerC"
+  },
+  "Value12": {
+    "address": 24,
+    "divider": 1,
+    "unit": "kW",
+    "name": "TotalPow"
+  },
+  "Value13": {
+    "address": 25,
+    "divider": 1,
+    "unit": "Hz",
+    "name": "Frequency"
+  },
+  "Value14": {
+    "address": 26,
+    "divider": 1,
+    "unit": "kWh",
+    "name": "Consumption"
+  },
+  "Value15": {
+    "address": 27,
+    "divider": 1,
+    "unit": "kWh",
+    "name": "Production"
+  }
+}

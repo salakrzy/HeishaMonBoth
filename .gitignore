@@ -1,16 +1,12 @@
 .cache
-.git
 .pio
 .pioenvs
 .vscode
-doc_tmp
-tmp work
-.DS_Store
-.clang_complete
-.gcc-flags.json
-.devcontainer
-include
-firmware.map
-extensions.json
-platformio_user_env.ini
-HMB.code-workspace
+data.tmp
+FlashFirmware
+DOC_tmp
+Modbusdef
+.gitignore
+tmp
+TestHeishamon
+HeishaMonBoth_3_9.code-workspace

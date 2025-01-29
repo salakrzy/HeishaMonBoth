@@ -28,6 +28,9 @@ void mqttGPIOCallback(char* topic, char* value);
 
 /*
 ESP32 GPIO def https://lastminuteengineers.com/esp32-wroom-32-pinout-reference/?utm_content=cmp-true  
+#define ENABLEPIN 2 //RS485 not used so we redirect  GPIO from 5 to 2  for compatibility
+#define ENABLEOTPIN 4 // OpenTherm enable/disable
+#define BOOTPIN 0 // Boot jumper
 
 #define ETH_TYPE        ETH_PHY_W5500
 #define ETH_ADDR        1
@@ -65,8 +68,9 @@ Boot pin1 ESP_GPIO_05 ESP_pin29 must be HIGH during boot
 Boot pin2 ESP_GPIO_00 ESP_pin5 INPUT must be HIGH during boot and LOW for programming
 Boot pin3  GND 
 
-Panasonic ESP_GPIO_26Tx, ESP_GPIO_27Rx
-CZTAW1    ESP_GPIO_17Tx, ESP_GPIO_16Rx
-logingSerial     0ESP_GPIO_1Tx, ESP_GPIO_03-Rx
-
+SERIAL PORTS DESCRIPTION
+Panasonic       ESP_GPIO_27 Rx   ESP_GPIO_26 Tx,  (hardware serial)
+CZTAW1          ESP_GPIO_16 Rx   ESP_GPIO_17 Tx,  (hardware serial)
+loggingSerial    ESP_GPIO_03 Rx   ESP_GPIO_1 Tx,   (hardware serial)
+ModbusSerial    ESP_GPIO_21 Rx   ESP_GPIO_19 Tx,  (software serial)
 */

@@ -22,7 +22,6 @@
 
 void log_message(char* string);
 
-
 static IPAddress apIP(192, 168, 4, 1);
 
 struct settingsStruct {
@@ -44,11 +43,10 @@ struct settingsStruct {
   char mqtt_username[65];
   char mqtt_password[65];
   char mqtt_topic_base[128] = "panasonic_heat_pump";
-  char mqtt_topic_listen[128] = "master_panasonic_heat_pump";
   char ntp_servers[254] = "pool.ntp.org";
 
+  bool force_rules = false; //force rules on boot, even after a crash
   bool listenonly = false; //listen only so heishamon can be installed parallel to cz-taw1, set commands will not work though
-  bool listenmqtt = false; //do we get heatpump data from another heishamon over mqtt?
   bool optionalPCB = false; //do we emulate an optional PCB?
   bool use_1wire = false; //1wire enabled?
   bool use_s0 = false; //s0 enabled?
@@ -59,6 +57,7 @@ struct settingsStruct {
   bool hotspot = true; //enable wifi hotspot when wifi is not connected
 #ifdef ESP32
   bool proxy = true; //cztaw proxy port enable flag
+  bool modbusOn = false; //enable Modbus
 #endif
   s0SettingsStruct s0Settings[NUM_S0_COUNTERS];
   gpioSettingsStruct gpioSettings;
