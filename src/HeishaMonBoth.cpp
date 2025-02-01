@@ -236,7 +236,7 @@ void check_wifi() {
       if ((WiFi.softAPSSID() == "") && (heishamonSettings.hotspot)) {
         log_message(_F("WiFi lost, starting setup hotspot..."));
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-        WiFi.softAP(_F("HeishaMon-Setup"));
+        WiFi.softAP(_F("HeishaMonBoth-Setup"));
       }
       if ((wifistatus == WL_DISCONNECTED) && (WiFi.softAPgetStationNum() == 0)) {
         log_message(_F("Retrying configured WiFi, ..."));
@@ -244,7 +244,7 @@ void check_wifi() {
       if (((WiFi.getMode() & WIFI_MODE_AP) == 0) && (heishamonSettings.hotspot)) {
         log_message(_F("WiFi lost, starting setup hotspot..."));
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-        WiFi.softAP(_F("HeishaMon-Setup"));
+        WiFi.softAP(_F("HeishaMonBoth-Setup"));
       }
       if ((wifistatus == WL_STOPPED  ) && (WiFi.softAPgetStationNum() == 0)) { //make sure we start STA again if it was stopped
         log_message(_F("Retrying configured WiFi, ..."));

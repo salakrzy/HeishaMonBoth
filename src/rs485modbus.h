@@ -56,6 +56,7 @@ int showModbus(struct webserver_t *client);
 int showMdbusSuccess(struct webserver_t *client);
 int showModbusFail(struct webserver_t *client);
 String printDirectory(File dir, int numTabs);
+void testWiFi(String tekst, int linia);
 #endif
 
 

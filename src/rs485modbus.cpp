@@ -396,3 +396,11 @@ int showCountDef(struct webserver_t *client) {
   }
   return 0;
 }
+
+
+void testWiFi(String tekst, int linia){
+  Serial.printf(_F("\n%i  %i   %s WiFi status=%i   getMode=%i SSID[0]=%s  WiFi IP="),linia, millis(), tekst, WiFi.status(),WiFi.getMode(),heishamonSettings.wifi_ssid);
+  Serial.print( WiFi.localIP());
+  Serial.printf(_F(" ETH IP="));
+  Serial.print( ETH.localIP());
+}

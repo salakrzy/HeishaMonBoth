@@ -2,11 +2,11 @@
 .pio
 .pioenvs
 .vscode
-data.tmp
-FlashFirmware
-DOC_tmp
-Modbusdef
 .gitignore
+FlashFirmware
 tmp
+tmp.data
+tmp.DOC
+tmp.Modbusdef
 TestHeishamon
 HeishaMonBoth_3_9.code-workspace
