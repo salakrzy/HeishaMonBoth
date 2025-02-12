@@ -561,8 +561,9 @@ bool readSerial()
     data[data_length + len] = heatpumpSerial.read(); //read available data and place it after the last received data
     len++;
     if ((data[0] != 0x71) && (data[0] != 0x31)) { //wrong header received!
-      log_message(_F("Received bad header. Ignoring this data!"));
-      if (heishamonSettings.logHexdump) logHex(data, len);
+      loggingSerial.printf("Ignore, Received bad header= %X buffer %i\n",data[0],heatpumpSerial.available());      // changed to improow buffer speed clean up 
+//      log_message(_F("Received bad header. Ignoring this data!"));
+//      if (heishamonSettings.logHexdump) logHex(data, len);
       badheaderread++;
       data_length = 0;
       return false; //return so this while loop does not loop forever if there happens to be a continous invalid data stream
