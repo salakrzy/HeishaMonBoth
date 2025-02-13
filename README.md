@@ -1,5 +1,5 @@
 # HeishaMonBoth Ver Software is under construction.
-# It will implement SoftwareSerial.h for redirect loggin messeges from  Hardweare UART) to sofrtwaere Serial port. 
+# It will implement SoftwareSerial.h for redirect log messeges from  Hardweare UART) to sofrtwaere Serial port. 
 ## GPIO 
 The new PCB version provides additional PINs GPIO (05, 12,14, 18,19, 21 Schmitt trigger,25, 33, 34, 35).\
 The S0 and S1 Counters  (GPIO 22 and 23) are Schmitt triggered.\
