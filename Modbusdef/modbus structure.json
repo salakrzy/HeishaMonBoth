@@ -1,0 +1,32 @@
+{
+  "addrstart": 0, //start registers address
+  "numb_registers": 59, // number registers to read from "addrstart" to end ( from 0x00 to 0x58)
+  "mqttTopic": "L3F1946-P6", // Topics prefix
+  "datasize1": 4, // how many bytes read per register (in this version one value for each read register)
+  "devAddress": 5, // counter Modbus  address
+  "Value0": {"address": 0, "divider": 1, "unit": "V", "name": "VoltageA"}, // value definitions 
+  "Value1": {"address": 1, "divider": 1, "unit": "V", "name": "VoltageB"},
+  "Value2": {"address": 2, "divider": 1, "unit": "V", "name": "VoltageC"},
+  "Value3": {"address": 3, "divider": 1, "unit": "V", "name": "VoltageAB"},
+  "Value4": {"address": 4, "divider": 1, "unit": "V", "name": "VoltageAC"},
+  "Value5": {"address": 5, "divider": 1, "unit": "V", "name": "VoltageBC"},
+  "Value6": {"address": 6, "divider": 1, "unit": "A", "name": "CurrentA"},
+  "Value7": {"address": 7, "divider": 1, "unit": "A", "name": "CurrentB"},
+  "Value8": {"address": 8, "divider": 1, "unit": "A", "name": "CurrentC"},
+  "Value9": {"address": 21, "divider": 1, "unit": "W", "name": "PowerA"},
+  "Value10": {"address": 22, "divider": 1, "unit": "kW", "name": "PowerB"},
+  "Value11": {"address": 23, "divider": 1, "unit": "kW", "name": "PowerC"},
+  "Value12": {"address": 24, "divider": 1, "unit": "kW", "name": "TotalPow"},
+  "Value13": {"address": 25, "divider": 1, "unit": "Hz", "name": "Frequency"},
+  "Value14": {
+    "address": 26,
+    "divider": 1,
+    "unit": "kWh",
+    "name": "Consumption"
+  },
+  "Value15": {"address": 27, "divider": 1, "unit": "kWh", "name": "Production"}
+}
+
+
+This structure must be written in minimal size jonson format( without any white signs eg. space, tab etc)
+proper  serialization method json file is expained by  "Serialization JSON.jpg" picture
