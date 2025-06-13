@@ -178,6 +178,6 @@ const optCmdStruct optionalCommands[] PROGMEM = {
   { "SetOptPCBByte9", set_byte_9 }
 };
 
-void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB);
+void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int,bool), void (*log_message)(char*), bool optionalPCB);
 bool saveOptionalPCB(byte* command, int length);
 bool loadOptionalPCB(byte* command, int length);

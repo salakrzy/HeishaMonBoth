@@ -16,7 +16,7 @@
 #define loggingSerial Serial 
 #define LOGRX 3
 #define LOGTX 1
-#define MODBUS_REDE_PIN GPIO_NUM_18  // RE/DE  GPIO18 is used for RS485 direction control for halfduplex devices
+// use interface not using RE/DE PIN #define MODBUS_REDE_PIN GPIO_NUM_18  // RE/DE  GPIO18 is used for RS485 direction control for halfduplex devices
 #define MAX_MODBUS_DEVICES 4
 #define MODBUS_READ_TIMER 10000		// Modbus read period
 #define MAX_MODBUS_VALUEARRAY 16  // max number of values in one modbus device defined in modbusXX.json  definition file stored on LittleFS
@@ -56,7 +56,6 @@ int showModbus(struct webserver_t *client);
 int showMdbusSuccess(struct webserver_t *client);
 int showModbusFail(struct webserver_t *client);
 String printDirectory(File dir, int numTabs);
-void testWiFi(String tekst, int linia);
 #endif
 
 

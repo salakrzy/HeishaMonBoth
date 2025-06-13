@@ -31,7 +31,7 @@
 #define MAXCOMMANDSINBUFFER 10
 #define OPTDATASIZE 20
 
-bool send_command(byte* command, int length);
+bool send_command(byte* command, int length, bool);
 
 extern int dallasDevicecount;
 extern dallasDataStruct *actDallasData;
@@ -607,7 +607,7 @@ static int8_t vm_value_set(struct rules_t *obj) {
         if(stricmp((char *)&key[1], tmp.name) == 0) {
           uint16_t len = tmp.func(payload, cmd, log_msg);
           log_message(log_msg);
-          send_command(cmd, len);
+          send_command(cmd, len,false);
           break;
         }
       }

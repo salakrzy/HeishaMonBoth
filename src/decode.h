@@ -2,7 +2,7 @@
 #include <PubSubClient.h>
 
 #define MQTT_RETAIN_VALUES 1
-
+# define DEBUG false
 void resetlastalldatatime();
 
 String getDataValue(char* data, unsigned int Topic_Number);

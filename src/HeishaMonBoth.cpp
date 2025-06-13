@@ -4,7 +4,7 @@
 //proxySerial		Serial2.begin(9600, SERIAL_8E1,16,17);    ////####ESP32Serial2 goes to cz-taw1, 
 //for MODBUS swSerial.begin(9600, EspSoftwareSerial::SWSERIAL_8N2, 21, 19, false, 256);  
 #define LOGRX 3
-#define LOGTX 1
+#define LOGTX 1 
 
 #define LWIP_INTERNAL
 
@@ -84,10 +84,13 @@ unsigned long bootButtonNotPressed = 0;
 #define WIFIRETRYTIMER 15000 // switch between hotspot and configured SSID each 10 secs if SSID is lost
 unsigned long lastWifiRetryTimer = 0;
 bool doInitialWifiScan = true; //we want an initial wifi scan to fill in the dropbox on the wifi settings page
-
+int wifistats= WiFi.status();//to check phase of WiFi handshake
 unsigned long lastRunTime = 0;
 unsigned long lastOptionalPCBRunTime = 0;
 unsigned long lastOptionalPCBSave = 0;
+unsigned long lastProxyRead = 0;
+bool proxydata_received = true;
+unsigned long proxydata_timestamp = 0; 
 
 unsigned long sendCommandReadTime = 0; //set to millis value during send, allow to wait millis for answer
 unsigned long goodreads = 0;
@@ -104,7 +107,7 @@ static int uploadpercentage = 0;
 #define MAXDATASIZE 255
 char data[MAXDATASIZE] = { '\0' };
 byte data_length = 0;
-EspSoftwareSerial::UART swSerial;//#485
+//EspSoftwareSerial::UART swSerial;//#485
 #ifdef ESP32
 //for received proxied data
 char proxydata[MAXDATASIZE] = { '\0' };
@@ -133,6 +136,7 @@ static int mqttReconnects = 0;
 struct cmdbuffer_t {
   uint8_t length;
   byte data[128];
+  bool cztaw_query; // true if this is a cztaw query
 } cmdbuffer[MAXCOMMANDSINBUFFER];
 
 static uint8_t cmdstart = 0;
@@ -165,10 +169,11 @@ int timerqueue_size = 0;
 #define ETH_SPI_MISO    34
 #define ETH_SPI_MOSI    12
 
-bool send_command(byte* command, int length);
+bool send_command(byte* command, int length,bool cztaw_query);
 void setupOTA();
 void send_optionalpcb_query();
 void log_message(char* string);//#485
+void send_initial_query();
 
 void setupETH() {
   SPI.begin(ETH_SPI_SCK, ETH_SPI_MISO, ETH_SPI_MOSI);
@@ -192,6 +197,10 @@ void setupETH() {
 */
 void check_wifi() {
   int wifistatus = WiFi.status();
+ if (!(  wifistats== WiFi.status()))
+ {  loggingSerial.printf("\nWiFI status= %i softAPgetStationNum=%i\n", WiFi.status(), WiFi.softAPgetStationNum()); //#opti
+  wifistats= WiFi.status();
+ }
   if ((wifistatus != WL_CONNECTED) && (WiFi.localIP())) {
     // special case where it seems that we are not connect but we do have working IP (causing the -1% wifi signal), do a reset.
 #ifdef ESP8266
@@ -246,8 +255,9 @@ void check_wifi() {
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
         WiFi.softAP(_F("HeishaMonBoth-Setup"));
       }
-      if ((wifistatus == WL_STOPPED  ) && (WiFi.softAPgetStationNum() == 0)) { //make sure we start STA again if it was stopped
+      if (((wifistatus==WL_STOPPED ) or (wifistatus==WL_IDLE_STATUS)) && (WiFi.softAPgetStationNum()==0)) { //make sure we start STA again if it was stopped  ###### important WL_IDLE_STATUS
         log_message(_F("Retrying configured WiFi, ..."));
+        WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
         WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN); //select best AP with same SSID
 #endif
         if (heishamonSettings.wifi_password[0] == '\0') {
@@ -489,16 +499,23 @@ void readProxy()
     proxydata[proxydata_length + proxylen] = proxySerial.read(); //read available data and place it after the last received data
     proxylen++;
     if ((proxydata[0] != 0x71) and  (proxydata[0] != 0x31) and  (proxydata[0] != 0xF1)) { //wrong header received!
-      log_message(_F("PROXY Received bad header. Ignoring this data!"));
-      if (heishamonSettings.logHexdump) logHex(proxydata, proxylen);
+      loggingSerial.printf("Ignore, Received bad proxy header= %X proxy buffer %i\n",proxydata[proxydata_length + proxylen-1],proxySerial.available());      // changed to improow buffer speed clean up 
+//      log_message(_F("PROXY Received bad header. Ignoring this data!"));
+//      if (heishamonSettings.logHexdump) logHex(proxydata, proxylen);
       proxydata_length = 0;
-      return; //return so this while loop does not loop forever if there happens to be a continous invalid data stream
+      proxylen = 0; //#optima
+      break; //#optima
     }
+    else if (proxydata[1] <= proxylen-3)  { //this is complete a query from cztaw on proxy port
+      log_message(_F("Received full data from CZTAW1"));
+      loggingSerial.printf("nWaiting from CZTAW1 proxydata_length =%i   proxylen =%i  bufferwaiting=  %i bytes\n",proxydata_length,proxylen,proxySerial.available());
+      break; //#optima    
+    } 
   }
   //if ((proxylen > 0) && (proxydata_length == 0 )) proxy_totalreads++; //this is the start of a new read
   proxydata_length +=  proxylen;
   if (proxydata_length > 1 ) { //should have received length part of header now
-    if ((proxydata_length > ( proxydata[1] + 3)) || (proxydata_length >= MAXDATASIZE)) {
+    if ((proxydata_length > ( proxydata[1] + 3)) || (proxydata_length >= MAXDATASIZE)) {  // probably not nessesary as we check this in the while loop above
       sprintf_P(log_msg, PSTR("PROXY Received %i bytes proxy %i\n"), proxydata_length, proxydata[1]);
       log_message(log_msg);
       log_message(_F("PROXY Received more data than header suggests! Ignoring this as this is bad data."));
@@ -506,7 +523,7 @@ void readProxy()
       if (heishamonSettings.logHexdump) logHex(proxydata, proxydata_length);
       return;
     }
-    if (proxydata_length == (proxydata[1] + 3)) { //we received all data (serial2_data[1] is header length field)
+    if (proxydata_length == (proxydata[1] + 3)) { //we received complit data from CZTAW )
       sprintf_P(log_msg, PSTR("PROXY Received %i bytes"), proxydata_length); log_message(log_msg);
       if (heishamonSettings.logHexdump) logHex(proxydata, proxydata_length);
       if (! isValidReceiveChecksum(proxydata,proxydata_length) ) {
@@ -515,42 +532,36 @@ void readProxy()
         return;
       }      
       log_message(_F("PROXY Checksum and header received ok!"));
-      if ((proxydata[0]==0x71 or proxydata[0]==0xF1) and proxydata_length == (PANASONICQUERYSIZE+1)) { //this is a query from cztaw on proxy port
+
+      if ((proxydata[0]==0x71 or proxydata[0]==0xF1) and proxydata_length == (PANASONICQUERYSIZE+1)) { //this is the possible  query from cztaw on proxy port expect the init 0x31
         if (proxydata[0]==0xf1) {  //this is a write query, just pass this message forward as new command
-          log_message(_F("PROXY received write query, copy message forward to heatpump"));
-          send_command((byte*)proxydata,proxydata_length-1); //strip CRC, will be calculated again in send_command
-          //then just reply with the current settings, for read and write it is the same as the write is only acknowledged in the next read
-          //so we just run to the next if statement
+          log_message(_F("PROXY received write query, forward message  to heatpump"));
+          
+//          proxydata_received = true; //set the flag to true , we are wait for forward pump answer to PROXY
         }
-        if (proxydata[3] == 0x10) {
+        else if (proxydata[3] == 0x10 and proxydata[0]==0x71 ) {
           log_message(_F("PROXY requests basic data"));
-          if ((actData[0] == 0x71) && (actData[1] == 0xc8) && (actData[2] == 0x01)) { //don't answer if we don't have data
-            proxySerial.write(actData,DATASIZE); //should contain valid checksum also
-          }
-        } else if (proxydata[3] == 0x21 ) {
+//          proxydata_received = true; //set the flag to true , we are wait for forward pump answer to PROXY
+        } else if (proxydata[3] == 0x21  and proxydata[0]==0x71 ) {
           log_message(_F("PROXY requests extra data"));
-          if ((actDataExtra[0] == 0x71) && (actDataExtra[1] == 0xc8) && (actDataExtra[2] == 0x01)) { //don't answer if we don't have data
-            proxySerial.write(actDataExtra,DATASIZE); //should containt valid checksum also
-          }
+//          proxydata_received = true; //set the flag to true , we are wait for forward pump answer to PROXY
         } else {
           log_message(_F("PROXY has sent unknown query! Forwarding to heatpump!"));
-          send_command((byte *)proxydata, proxydata_length-1); //strip CRC from end as send_command wil recalculate it
         }
-        proxydata_length = 0;
-        return;
       } else if (proxydata[0]==0x31) {
         log_message(_F("PROXY received startup message, forwarding to heatpump!"));
-        send_command((byte *)proxydata, proxydata_length-1); //strip CRC from end as send_command wil recalculate it
-        proxydata_length = 0;
-        return;
       } else {
         log_message(_F("PROXY received unknown message, forwarding it to heatpump anyway!"));
-        send_command((byte *)proxydata, proxydata_length-1); //strip CRC from end as send_command wil recalculate it
-        proxydata_length = 0;
-        return;
       }
+        send_command((byte *)proxydata, proxydata_length-1,true); //strip CRC from end as send_command wil recalculate it
+        proxydata_length = 0;
+        proxydata_timestamp = millis(); //set the timestamp to now so we can check if we have a timeout
+        return;
     }
   }
+else {if ((millis() - proxydata_timestamp > SERIALTIMEOUT)) { //if we have not received data for 1 second, reset the flag so we can request this data again
+  proxydata_received = true;
+}}
 }
 #endif
 
@@ -561,28 +572,30 @@ bool readSerial()
     data[data_length + len] = heatpumpSerial.read(); //read available data and place it after the last received data
     len++;
     if ((data[0] != 0x71) && (data[0] != 0x31)) { //wrong header received!
-      loggingSerial.printf("Ignore, Received bad header= %X buffer %i\n",data[0],heatpumpSerial.available());      // changed to improow buffer speed clean up 
+      loggingSerial.printf("Ignore, Received bad header= %X buffer %i\n",data[0],heatpumpSerial.available());
+// changed to improow buffer speed clean up 
 //      log_message(_F("Received bad header. Ignoring this data!"));
 //      if (heishamonSettings.logHexdump) logHex(data, len);
       badheaderread++;
       data_length = 0;
-      return false; //return so this while loop does not loop forever if there happens to be a continous invalid data stream
+      len = 0; //#optima
+      break; //#optima
+    }
+    else if (data[1] <= len-3)  { 
+      log_message(_F("Received proper data length  from Pump"));
+      break; //#optima
     }
   }
-
   if ((len > 0) && (data_length == 0 )) totalreads++; //this is the start of a new read
   data_length += len;
-
   if (data_length > 1) { //should have received length part of header now
-
-    if ((data_length > (data[1] + 3)) || (data_length >= MAXDATASIZE) ) {
+  if ((data_length > (data[1] + 3)) || (data_length >= MAXDATASIZE) ) {
       log_message(_F("Received more data than header suggests! Ignoring this as this is bad data."));
       if (heishamonSettings.logHexdump) logHex(data, data_length);
       data_length = 0;
       toolongread++;
       return false;
     }
-
     if (data_length == (data[1] + 3)) { //we received all data (data[1] is header length field)
       sprintf_P(log_msg, PSTR("Received %d bytes data"), data_length); log_message(log_msg);
       sending = false; //we received an answer after our last command so from now on we can start a new send request again
@@ -593,11 +606,14 @@ bool readSerial()
         badcrcread++;
         return false;
       }
-      log_message(_F("Checksum and header received ok!"));
+      if (DEBUG) log_message(_F("Checksum and header received ok!"));  //#optim
       goodreads++;
-
       if (data_length == DATASIZE)  {  //receive a full data block
         if  (data[3] == 0x10) { //decode the normal data block
+                if (!proxydata_received )   {
+                   proxySerial.write(data,data_length);
+                   proxydata_received = true; //set the flag to true so we know we can request this data always
+                }
           decode_heatpump_data(data, actData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
           {
             char mqtt_topic[256];
@@ -608,6 +624,10 @@ bool readSerial()
           return true;
         } else if (data[3] == 0x21) { //decode the new model extra data block
           extraDataBlockAvailable = true; //set the flag to true so we know we can request this data always
+                 if (!proxydata_received )   {
+                   proxySerial.write(data,data_length);
+                   proxydata_received = true; //set the flag to true so we know we can request this data always
+                }         
           decode_heatpump_data_extra(data, actDataExtra, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
           {
             char mqtt_topic[256];
@@ -651,43 +671,47 @@ bool readSerial()
 void popCommandBuffer() {
   // to make sure we can pop a command from the buffer
   if ((!sending) && cmdnrel > 0) {
-    send_command(cmdbuffer[cmdstart].data, cmdbuffer[cmdstart].length);
+    send_command(cmdbuffer[cmdstart].data, cmdbuffer[cmdstart].length, cmdbuffer[cmdstart].cztaw_query);
     cmdstart = (cmdstart + 1) % (MAXCOMMANDSINBUFFER);
     cmdnrel--;
   }
 }
 
-void pushCommandBuffer(byte* command, int length) {
+void pushCommandBuffer(byte* command, int length,bool direction) {
   if (cmdnrel + 1 > MAXCOMMANDSINBUFFER) {
-    log_message(_F("Too much commands already in buffer. Ignoring this commands.\n"));
+    log_message(_F("Too much commands already in buffer. Ignoring this commands .\n"));
     return;
   }
   cmdbuffer[cmdend].length = length;
   memcpy(&cmdbuffer[cmdend].data, command, length);
+  cmdbuffer[cmdend].cztaw_query = direction;  // true if this is a cztaw query
   cmdend = (cmdend + 1) % (MAXCOMMANDSINBUFFER);
   cmdnrel++;
 }
 
-bool send_command(byte* command, int length) {
+bool send_command(byte* command, int length, bool cztaw_query) {
   if ( heishamonSettings.listenonly ) {
     log_message(_F("Not sending this command. Heishamon in listen only mode!"));
     return false;
   }
   if ( sending ) {
     log_message(_F("Already sending data. Buffering this send request"));
-    pushCommandBuffer(command, length);
+    pushCommandBuffer(command, length, cztaw_query);
     return false;
   }
   sending = true; //simple semaphore to only allow one send command at a time, semaphore ends when answered data is received
-
   byte chk = calcChecksum(command, length);
   int bytesSent = heatpumpSerial.write(command, length); //first send command
   bytesSent += heatpumpSerial.write(chk); //then calculcated checksum byte afterwards
+  sendCommandReadTime = millis(); //MUST BE very quickly set sendCommandReadTime when to timeout the answer of this command
+  //lastRunTime =sendCommandReadTime; // to prewent send query to heatpump one by one #Coomon
+  if (cztaw_query) {
+    proxydata_received = false;
+    proxydata_timestamp = sendCommandReadTime ; //set the timestamp to now so we can check if we have a timeout
+  }
   sprintf_P(log_msg, PSTR("sent bytes: %d including checksum value: %d "), bytesSent, int(chk));
-  log_message(log_msg);
-
+  if (DEBUG) log_message(log_msg);//#optima
   if (heishamonSettings.logHexdump) logHex((char*)command, length);
-  sendCommandReadTime = millis(); //set sendCommandReadTime when to timeout the answer of this command
   return true;
 }
 
@@ -712,7 +736,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 
       sprintf_P(log_msg, PSTR("sending raw value"));
       log_message(log_msg);
-      send_command(rawcommand, length);
+      send_command(rawcommand, length,false);
       free(rawcommand);
     } else if (strncmp(topic_command, mqtt_topic_s0, strlen(mqtt_topic_s0)) == 0)  // this is a s0 topic, check for watthour topic and restore it
     {
@@ -906,7 +930,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                   strcat((char *)client->userdata, log_msg);
                   strcat((char *)client->userdata, "\n");
                   log_message(log_msg);
-                  send_command(cmd, len);
+                  send_command(cmd, len,false);
                 }
               }
 
@@ -1373,10 +1397,12 @@ void switchSerial() {
   // need to create new serial startup config for ESP32
   heatpumpSerial.flush();
   heatpumpSerial.end();
+  heatpumpSerial.setRxBufferSize(610);
   heatpumpSerial.begin(9600, SERIAL_8E1,HEATPUMPRX,HEATPUMPTX);
   heatpumpSerial.flush();
   proxySerial.flush();
   proxySerial.end();
+  proxySerial.setRxBufferSize(512);
   proxySerial.begin(9600, SERIAL_8E1,PROXYRX,PROXYTX);
   proxySerial.flush();  
   if (heishamonSettings.modbusOn){ //#485
@@ -1425,7 +1451,7 @@ void setupMqtt() {
 }
 
 void setupConditionals() {
-  //send_initial_query(); //maybe necessary but for now disable. CZ-TAW1 sends this query on boot
+  send_initial_query(); //maybe necessary but for now disable. CZ-TAW1 sends this query on boot
 
   //load optional PCB data from flash
   if (heishamonSettings.optionalPCB) {
@@ -1673,18 +1699,18 @@ void setup() {
 
 void send_initial_query() {
   log_message(_F("Requesting initial start query"));
-  send_command(initialQuery, INITIALQUERYSIZE);
+  send_command(initialQuery, INITIALQUERYSIZE,true);
 
 }
 
 void send_panasonic_query() {
   log_message(_F("Requesting new panasonic data"));
-  send_command(panasonicQuery, PANASONICQUERYSIZE);
+  send_command(panasonicQuery, PANASONICQUERYSIZE, false);
   // rest is for the new data block on new models
   if (extraDataBlockAvailable) {
     log_message(_F("Requesting new panasonic extra data"));
     panasonicQuery[3] = 0x21; //setting 4th byte to 0x21 is a request for extra block
-    send_command(panasonicQuery, PANASONICQUERYSIZE);
+    send_command(panasonicQuery, PANASONICQUERYSIZE, false);
     panasonicQuery[3] = 0x10; //setting 4th back to 0x10 for normal data request next time
   } else  {
     //if ((actData[0] == 0x71) && (actData[1] == 0xc8) && (actData[2] == 0x01) && (actData[193] == 0)  && (actData[195] == 0)  && (actData[197] == 0) ) { //do we have valid data but 0 value in heat consumptiom power, then assume K or L series
@@ -1697,7 +1723,7 @@ void send_panasonic_query() {
 
 void send_optionalpcb_query() {
   log_message(_F("Sending optional PCB data"));
-  send_command(optionalPCBQuery, OPTIONALPCBQUERYSIZE);
+  send_command(optionalPCBQuery, OPTIONALPCBQUERYSIZE,false);
 }
 
 
@@ -1751,7 +1777,10 @@ void loop() {
 
   readHeatpump();
   #ifdef ESP32
-  if (heishamonSettings.proxy) readProxy();
+  if( (heishamonSettings.proxy) && (lastProxyRead-millis()) > 250){
+    readProxy();
+    lastProxyRead=millis();
+  }
   #endif
 
   if ((!sending) && (cmdnrel > 0)) { //check if there is a send command in the buffer

@@ -2,14 +2,21 @@
 
 This Module use additional board to convert the RS485 RTU Modbus to RS232 Serial UART signals.
 
-You can use the inteface  without flow control pins DE/RE
+You can use the inteface with the DE/RE control pin but the module available on Aliexpress require replace 20k resistor with 120 ohm . Perhaps other implementations of this module do not require modification, but the one visible in the photo has resistor values R5 and R6 that are inconsistent with the MODBUS standard.
+
+<img src="assets/RS485wDEREcontrol.png" width="300"> 
+<img src="assets/RS485ChangesDescription.png" width="380">
+
+<img src="assets/ModbusDEREconnection.jpg">
+
+or like this without flow control pins DE/RE
 
 <img src="assets/RS485toUARTconverter.jpg" width="300">
 
 <img src="assets/RS485toHMBconnection.jpg">
 
-The transmission modbus Device parametters must be set to speed -**9600**, bits -**8**, parity -**None**, stop bits -1 (**9600 8N1** ) and modbus device address must be set this same as the parameter "devAddress" in Modbusxxx.json config file.
-It is aconnected the MODBU converter interface to the hardware UART0 port,  this requires blocking the sending of logs to  port USB in configs. When logging messages are se
+The Modbus module use the "EspSoftwareSerial" librrary to create additional serial port to connect the RS485 converter to HeishModBoth. The transmission modbus Device parametters must be set to speed -**9600**, bits -**8**, parity -**None**, stop bits -**2** (**9600 8N2** ) and modbus device address must be set this same as the parameter "devAddress" in Modbusxxx.json config file.
+It is also possible to connect the MODBU converter interface to the hardware UART0 port, however, this requires blocking the sending of logs to this port, but the software solution seems to be efficient enough for communication at a speed of 9600 bps and such a solution has not been implemented yet.
 
 From the 3.8.1 verison, HeishaMonBoth allows send and handling up to 4 queries to the same device or up to 4 different Modbus devices connected to this same bus, depending what the device address is set by parameter "devAddress". Each Modbusxxx.json file define one query and his name must start from Modbus  word eg Modbus12.json, Modbus3new,json. Each query allows handling up to 16 measured values from the device response. So you can read 16 values from each 4 different devices, 64 values from 1 device or any other combinations defined by the user. The user can define queries for non-standard devices by himself using the description of how to create and upload modbusxxx.json files to the board. The software supports up to 4 Modbusxxx.json files, if more than 4 counter definitions are uploaded only the first 4 will be used and the rest will be ignored.
 
@@ -83,9 +90,11 @@ To ensure the restoration of communication with the Board in the event of contin
 
 You can view the meter readings in the console tab on the HeishaMonBoth website.
 
+<img src="assets/ModbusConsole.jpg">
 
 You can also view them on an MQTT server.
 
 <img src="assets/ModbusMQTT.jpg">
 
 ### I encourage you to report any bugs you discover or suggestions for improving the functionality of the HeishaMonBoth interface in the Issue section.
+

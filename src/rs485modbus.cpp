@@ -12,7 +12,7 @@
 #include "webfunctions.h"
 extern bool data_ready;
 extern PubSubClient mqtt_client;
-extern EspSoftwareSerial::UART swSerial;
+//extern EspSoftwareSerial::UART swSerial;
 extern settingsStruct heishamonSettings;
 bool data_ready = false;
 float powerRead[120];
@@ -395,12 +395,4 @@ int showCountDef(struct webserver_t *client) {
     webserver_send_content_P(client, webFooter, strlen_P(webFooter));
   }
   return 0;
-}
-
-
-void testWiFi(String tekst, int linia){
-  Serial.printf(_F("\n%i  %i   %s WiFi status=%i   getMode=%i SSID[0]=%s  WiFi IP="),linia, millis(), tekst, WiFi.status(),WiFi.getMode(),heishamonSettings.wifi_ssid);
-  Serial.print( WiFi.localIP());
-  Serial.printf(_F(" ETH IP="));
-  Serial.print( ETH.localIP());
 }

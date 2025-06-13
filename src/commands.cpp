@@ -1037,18 +1037,18 @@ unsigned int set_solar_temp(char *msg, char *log_msg) {
 
 
 
-void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB) {
+void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int,bool ), void (*log_message)(char*), bool optionalPCB) {
   unsigned char cmd[256] = { 0 };
   char log_msg[256] = { 0 };
   unsigned int len = 0;
-
+bool direction = false;
   for (unsigned int i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
     cmdStruct tmp;
     memcpy_P(&tmp, &commands[i], sizeof(tmp));
     if (strcmp(topic, tmp.name) == 0) {
       len = tmp.func(msg, cmd, log_msg);
       log_message(log_msg);
-      if (len > 0) send_command(cmd, len);
+      if (len > 0) send_command(cmd, len, direction);
     }
   }
 

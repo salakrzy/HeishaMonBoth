@@ -232,7 +232,7 @@ void loadSettings(settingsStruct *heishamonSettings) {
           heishamonSettings->modbusOn = ( jsonDoc["modbusOn"] == "enabled" ) ? true : false;
 #endif          
           if ( jsonDoc["waitTime"]) heishamonSettings->waitTime = jsonDoc["waitTime"];
-          if (heishamonSettings->waitTime < 5) heishamonSettings->waitTime = 5;
+          if (heishamonSettings->waitTime < 5) heishamonSettings->waitTime = 5; //#Jacek
           if ( jsonDoc["waitDallasTime"]) heishamonSettings->waitDallasTime = jsonDoc["waitDallasTime"];
           if (heishamonSettings->waitDallasTime < 5) heishamonSettings->waitDallasTime = 5;
           if ( jsonDoc["dallasResolution"]) heishamonSettings->dallasResolution = jsonDoc["dallasResolution"];
