@@ -13,10 +13,9 @@ This Module use additional board to convert the RS485 RTU Modbus to RS232 Serial
 ```
 
 ### gpio.h
-
+```
 *struct gpioSettingsStruct {
 #if defined(ESP8266)
-
 unsigned int gpioPin[NUMGPIO] = {1, 3, 16};
 unsigned int gpioMode[NUMGPIO] = {INPUT_PULLUP, INPUT_PULLUP, INPUT_PULLUP};
 #elif defined(ESP32)
@@ -28,16 +27,16 @@ unsigned int gpioMode[NUMGPIO] = {OUTPUT,  OUTPUT,OUTPUT,INPUT_PULLUP, INPUT_PUL
 //GPIO1 pin1 ESP_GPIO_21   ESP_pin33  / TX for Software Serial
 //GPIO1 pin2 ESP_GPIO_19   ESP_pin31  / RX for Software Serial
 //GPIO1 pin3 ESP_GPIO_18,  ESP_pin30  / DE/RE for Software Serial
-
+```
 ### rs485modbus.cpp
-
+```
 *void setupModbus(){  // **************************************************************************************
 if (heishamonSettings.modbusOn){
 //  Serial.end();
 // RTUutils::prepareHardwareSerial(Serial);
 swSerial.begin(9600, EspSoftwareSerial::SWSERIAL_8N2, MODBUS_RX1_PIN, MODBUS_TX1_PIN, false,500,11);  //Set up Serial port for ModbusRTU 8N1 must be set the same on the Modbus device
 swSerial.enableIntTx(false);
-......*
+......*```
 
 You can use the inteface with the DE/RE control pin but the module available on Aliexpress require replace 20k resistor with 120 ohm . Perhaps other implementations of this module do not require modification, but the one visible in the photo has resistor values R5 and R6 that are inconsistent with the MODBUS standard.
 
