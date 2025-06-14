@@ -6,10 +6,12 @@
   file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
-unsigned int alignedbuffer(int v) {
-#if defined(ESP8266)
-  return (v + 3) & ~0x3;
-#else
-  return v;
+#ifndef _RULES_GPIO_H_
+#define _RULES_GPIO_H_
+
+#include <stdint.h>
+#include "../rules.h"
+
+int8_t rule_function_gpio_callback(struct rules_t *obj);
+
 #endif
-}

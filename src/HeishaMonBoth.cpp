@@ -1,16 +1,16 @@
-  // you can change Tx and Rx to any GPIO Serialx.begin(9600, SERIAL_8E1, Rx,Tx);
-//loggingSerial	Serial.begin(115200,SERIAL_8N1,3,1); ////####ESP32initial Serial for monitoring
+// you can change Tx and Rx to any GPIO using command Serialx.begin(9600, SERIAL_8E1, Rx,Tx);
+//loggingSerial	Serial.begin(115200,SERIAL_8N1,LOGRX,LOGTX); ////####ESP32initial Serial for monitoring
 //heatpumpSerial	Serial1.begin(9600, SERIAL_8E1,27,26);    ////####ESP32Serial goes to cn-cnt in Panasonic Heat Pump, 
 //proxySerial		Serial2.begin(9600, SERIAL_8E1,16,17);    ////####ESP32Serial2 goes to cz-taw1, 
-  
-  #define LOGRX 3
-  #define LOGTX 1
+//for MODBUS swSerial.begin(9600, EspSoftwareSerial::SWSERIAL_8N2, 21, 19, false, 256);  
+#define LOGRX 3
+#define LOGTX 1
 
 #define LWIP_INTERNAL
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
+#include <ESP8266mDNS.h>y
   #define heatpumpSerial Serial
   #define loggingSerial Serial1
   #define ENABLEPIN 5
@@ -25,13 +25,15 @@
   #define HEATPUMPTX 26
   #define PROXYRX 16
   #define PROXYTX 17
-  #define ENABLEPIN 5
+  #define ENABLEPIN 2 //RS485 not used so we redirect  GPIO from 5 to 2 
   #define ENABLEOTPIN 4
   #define LEDPIN 42
   #define BOOTPIN 0
+
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <Adafruit_NeoPixel.h>
+#include <SoftwareSerial.h>//#485
 #endif
 
 
@@ -40,7 +42,7 @@
 #include <ArduinoOTA.h>
 #include <DNSServer.h>
 #include <ArduinoJson.h>
-
+#include "rs485modbus.h"//#485
 #include "lwip/apps/sntp.h"
 #include "src/common/timerqueue.h"
 #include "src/common/stricmp.h"
@@ -102,7 +104,7 @@ static int uploadpercentage = 0;
 #define MAXDATASIZE 255
 char data[MAXDATASIZE] = { '\0' };
 byte data_length = 0;
-
+EspSoftwareSerial::UART swSerial;//#485
 #ifdef ESP32
 //for received proxied data
 char proxydata[MAXDATASIZE] = { '\0' };
@@ -143,6 +145,8 @@ static uint8_t cmdnrel = 0;
 WiFiClient mqtt_wifi_client;
 PubSubClient mqtt_client;
 
+
+
 bool firstConnectSinceBoot = true; //if this is true there is no first connection made yet
 
 struct timerqueue_t **timerqueue = NULL;
@@ -150,9 +154,8 @@ int timerqueue_size = 0;
 
 #ifdef ESP32
 #define ETH_TYPE        ETH_PHY_W5500
-#define ETH_ADDR        1
-
-// ETH pins
+#define ETH_ADDR         1
+// ETH pins #485
 #define ETH_CS          25
 #define ETH_IRQ         33
 #define ETH_RST         35
@@ -165,14 +168,14 @@ int timerqueue_size = 0;
 bool send_command(byte* command, int length);
 void setupOTA();
 void send_optionalpcb_query();
+void log_message(char* string);//#485
 
 void setupETH() {
-
   SPI.begin(ETH_SPI_SCK, ETH_SPI_MISO, ETH_SPI_MOSI);
-    loggingSerial.println("SPI started");  //ver3.8 
+    loggingSerial.println("SPI started");  //#485
   if (ETH.begin(ETH_TYPE, ETH_ADDR, ETH_CS, ETH_IRQ, ETH_RST, SPI)) {
     //sethostname on ESP32 after eth.begin (!! for wifi is most be before...!!)
-    String ETHname =heishamonSettings.wifi_hostname;//ver3.8 
+    String ETHname =heishamonSettings.wifi_hostname;//#485 
     ETHname="ETH"+ETHname;
     ETH.setHostname(ETHname.c_str());
     loggingSerial.println("Ethernet started OK)");
@@ -214,12 +217,15 @@ void check_wifi() {
     */
 #ifdef ESP8266
     if ((heishamonSettings.wifi_ssid[0] != '\0') && (wifistatus != WL_DISCONNECTED) && (WiFi.scanComplete() != -1) && (WiFi.softAPgetStationNum() > 0)) {
-#else
-    if ((heishamonSettings.wifi_ssid[0] != '\0') && (wifistatus != WL_STOPPED) && (WiFi.scanComplete() != -1) && (WiFi.softAPgetStationNum() > 0)) {
-#endif
       log_message(_F("WiFi lost, but softAP station connecting, so stop trying to connect to configured ssid..."));
       WiFi.disconnect(true);
     }
+#else
+    if ((heishamonSettings.wifi_ssid[0] != '\0') && (wifistatus != WL_STOPPED) && (WiFi.scanComplete() != -1) && (WiFi.softAPgetStationNum() > 0)) {
+      log_message(_F("WiFi lost, but softAP station connecting, so stop trying to connect to configured ssid..."));
+      WiFi.mode(WIFI_AP);
+    }
+#endif
 
     /*  only start this routine if timeout on
         reconnecting to AP and SSID is set
@@ -230,7 +236,7 @@ void check_wifi() {
       if ((WiFi.softAPSSID() == "") && (heishamonSettings.hotspot)) {
         log_message(_F("WiFi lost, starting setup hotspot..."));
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-        WiFi.softAP(_F("HeishaMon-Setup"));
+        WiFi.softAP(_F("HeishaMonBoth-Setup"));
       }
       if ((wifistatus == WL_DISCONNECTED) && (WiFi.softAPgetStationNum() == 0)) {
         log_message(_F("Retrying configured WiFi, ..."));
@@ -238,24 +244,21 @@ void check_wifi() {
       if (((WiFi.getMode() & WIFI_MODE_AP) == 0) && (heishamonSettings.hotspot)) {
         log_message(_F("WiFi lost, starting setup hotspot..."));
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-        WiFi.softAP(_F("HeishaMon-Setup"));
+        WiFi.softAP(_F("HeishaMonBoth-Setup"));
       }
-      if ((wifistatus == WL_STOPPED) && (WiFi.softAPgetStationNum() == 0)) {
+      if ((wifistatus == WL_STOPPED  ) && (WiFi.softAPgetStationNum() == 0)) { //make sure we start STA again if it was stopped
         log_message(_F("Retrying configured WiFi, ..."));
+        WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN); //select best AP with same SSID
 #endif
         if (heishamonSettings.wifi_password[0] == '\0') {
           WiFi.begin(heishamonSettings.wifi_ssid);
         } else {
           WiFi.begin(heishamonSettings.wifi_ssid, heishamonSettings.wifi_password);
         }
+#ifdef ESP8266        
       } else {
         log_message(_F("Reconnecting to WiFi failed. Waiting a few seconds before trying again."));
-#ifdef ESP8266        
         WiFi.disconnect(true);
-#else
-        WiFi.mode(WIFI_MODE_APSTA);
-        WiFi.disconnect(true);
-        WiFi.mode(WIFI_MODE_AP);
 #endif        
       }
     }
@@ -283,7 +286,7 @@ void check_wifi() {
       setupOTA();
       MDNS.begin(heishamonSettings.wifi_hostname);
       MDNS.addService("http", "tcp", 80);
-      loggingSerial.print("Current IP = ");
+      loggingSerial.print("Current IP = ");//#485
       loggingSerial.println(WiFi.localIP());
 #ifdef ESP8266
       experimental::ESP8266WiFiGratuitous::stationKeepAliveSetIntervalMs(5000);  //necessary for some users with bad wifi routers
@@ -293,8 +296,7 @@ void check_wifi() {
         log_message(_F("WiFi connected without SSID and password in settings. Must come from persistent memory. Storing in settings."));
         WiFi.SSID().toCharArray(heishamonSettings.wifi_ssid, 40);
         WiFi.psk().toCharArray(heishamonSettings.wifi_password, 40);
-//ver3.8 back to old        JsonDocument jsonDoc;
-        StaticJsonDocument<512> jsonDoc;
+        JsonDocument jsonDoc;
         settingsToJson(jsonDoc, &heishamonSettings);  //stores current settings in a json document
         saveJsonToFile(jsonDoc, "config.json");     //save to config file
       }
@@ -376,11 +378,10 @@ void mqtt_reconnect()
         resetlastalldatatime(); //resend all heatpump values to mqtt
       }
       //use this to receive valid heishamon raw data from other heishamon to debug this OT code
-#define OTDEBUG
-#ifdef OTDEBUG
-      if ( heishamonSettings.listenonly && heishamonSettings.listenmqtt ) {
-        sprintf(topic, "%s/raw/data", heishamonSettings.mqtt_topic_listen);
-        mqtt_client.subscribe(topic); //subscribe to raw heatpump data over MQTT
+//#define RAWDEBUG
+#ifdef RAWDEBUG
+      if ( heishamonSettings.listenonly) {
+        mqtt_client.subscribe((char*)"panasonic_heat_pump/raw/data"); //subscribe to raw heatpump data over MQTT
       }
 #endif
     }
@@ -409,7 +410,7 @@ void log_message(char* string)
   struct tm *timeinfo = localtime(&rawtime);
   char timestring[32];
   strftime(timestring, 32, "%c", timeinfo);
-  size_t len = strlen(string) + strlen(timestring) + 20; //+20 long enough to contain millis()
+  size_t len = strlen(string) + strlen(timestring) + 32; //+32 long enough to contain millis() and the json part later for websocket mesg
   char* log_line = (char *) malloc(len);
   snprintf(log_line, len, "%s (%lu): %s", timestring, millis(), string);
 
@@ -430,11 +431,10 @@ void log_message(char* string)
       mqtt_client.disconnect();
     }
   }
-  char* websocketMsg = (char *) malloc(len+12);
-  snprintf(websocketMsg, len+12, "{\"logMsg\":\"%s\"}", log_line);
+  //send log message to websocket
+  snprintf(log_line, len+12, "{\"logMsg\":\"%s (%lu): %s\"}", timestring, millis(), string);
+  websocket_write_all(log_line, strlen(log_line));
   free(log_line);
-  websocket_write_all(websocketMsg, strlen(websocketMsg));
-  free(websocketMsg);
 #ifdef ESP32
   if (!inSetup) blinkNeoPixel(false);
 #endif  
@@ -729,10 +729,9 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     {
       char* topic_sendcommand = topic_command + strlen(mqtt_topic_commands) + 1; //strip the first 9 "commands/" from the topic to get what we need
       send_heatpump_command(topic_sendcommand, msg, send_command, log_message, heishamonSettings.optionalPCB);
-    }
     //use this to receive valid heishamon raw data from other heishamon to debug this OT code
-#ifdef OTDEBUG
-    else if (strcmp((char*)"panasonic_heat_pump/data", topic) == 0) {  // check for raw heatpump input
+#ifdef RAWDEBUG
+    } else if (strcmp((char*)"panasonic_heat_pump/raw/data", topic) == 0) {  // check for raw heatpump input
       sprintf_P(log_msg, PSTR("Received raw heatpump data from MQTT"));
       log_message(log_msg);
       decode_heatpump_data(msg, actData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
@@ -772,15 +771,21 @@ void setupOTA() {
   ArduinoOTA.begin();
 }
 
+
+
 int8_t webserver_cb(struct webserver_t *client, void *dat) {
+//  loggingSerial.printf("\n\n%i  WEBSERWER  dat=%p##  step=%i substep=%i content=%X  ROUTE=%i\n",__LINE__, dat,client->step,client->substep,client->content,client->route);
+
   switch (client->step) {
     case WEBSERVER_CLIENT_REQUEST_METHOD: {
+//  loggingSerial.printf("\n%i  WEBSERVER_CLIENT_REQUEST_METHOD: dat=%p##  client_step=%i client_content=%X  ROUTE=%i  dat=%s",__LINE__, dat,client->step,client->content,client->route,(char *) dat);
         if (strcmp_P((char *)dat, PSTR("POST")) == 0) {
           client->route = 110;
         }
         return 0;
       } break;
     case WEBSERVER_CLIENT_REQUEST_URI: {
+//        loggingSerial.printf("\n%i  WEBSERVER_CLIENT_REQUEST_URI: %s",__LINE__, (char *) dat);
         if (strcmp_P((char *)dat, PSTR("/")) == 0) {
           client->route = 1;
         } else if (strcmp_P((char *)dat, PSTR("/json")) == 0) {
@@ -828,6 +833,8 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
               LittleFS.remove("/rules.new");
               client->userdata = new File(LittleFS.open("/rules.new", "a+"));
             }
+          } else if (strcmp_P((char *)dat, PSTR("/modbus")) == 0) { //#485
+            client->route = 142; 
           } else if (strcmp_P((char *)dat, PSTR("/firmware")) == 0) {
             if (!Update.isRunning()) {
 #ifdef ESP8266
@@ -853,6 +860,9 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
           client->route = 130;
         } else if (strcmp_P((char *)dat, PSTR("/firmware")) == 0) {
           client->route = 140;
+        } else if (strcmp_P((char *)dat, PSTR("/modbus")) == 0) { //#485
+// loggingSerial.printf("\n%i  WEBSERVER_CLIENT_REQUEST_URI: %s",__LINE__, (char *) dat);          
+          client->route = 149;         
         } else if (strcmp_P((char *)dat, PSTR("/rules")) == 0) {
           client->route = 160;
         } else if (strcmp_P((char *)dat, PSTR("/scandallas")) == 0) {
@@ -865,6 +875,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
       } break;
     case WEBSERVER_CLIENT_ARGS: {
         struct arguments_t *args = (struct arguments_t *)dat;
+//  loggingSerial.printf("\n%i WEBSERVER_CLIENT_ARGS:start ROUTE=%i name=%s## len=%i##  value=%s## ",__LINE__, client->route, args->name, args->len, args->value);       
         switch (client->route) {
           case 60: {
               sprintf_P(log_msg, PSTR("Dallas alias changed address %s to alias %s"), args->name, args->value);
@@ -923,6 +934,78 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
           case 110: {
               return cacheSettings(client, args);
             } break;
+          case 142: { //#485
+//  loggingSerial.printf("\n%i ROUTE=%i  LEN=%i##\nNAME=%s##\nVALUE=%s##",__LINE__, client->route,args->len, args->name, args->value); 
+           if ((strcmp((char *)args->name, "modbusact") == 0)and  (strcmp((char *)args->value, "Delete")==0)) {
+            client->route = 146; 
+           }
+           else if ((strcmp((char *)args->name, "modbusact") == 0)and  (strcmp((char *)args->value, "View")==0)) {
+            client->route = 148; 
+           }
+           else if ((strcmp((char *)args->name, "counterdef") == 0)) {
+            client->route = 149;
+           }
+            else if ((strcmp((char *)args->name, "modbusdef") == 0) ) {
+              if (LittleFS.begin()) {
+                char   tmp_name[17]= "/modbustmp.json";
+                tmp_name[16]='\0';
+                LittleFS.remove(tmp_name);
+                client->userdata = new File(LittleFS.open( tmp_name, "a+"));
+                File *f = (File *)client->userdata;
+                if (!f || !*f) {
+                } else {
+                  f->write(args->value, args->len);
+                  client->route = 143;
+                }
+              }
+            }
+          } break;
+           case 143:{
+              File *f = (File *)client->userdata;
+              if (!f || !*f) {
+              } 
+              else {
+                if (strcmp((char *)args->name, "modbdefi") == 0) {
+                  f->close();
+                  args->value[args->len]='\0';   // do wyrzucenia
+                  char tmp_name[args->len + 1];
+                  memset(&tmp_name, 0, args->len + 1);
+                  snprintf((char *)&tmp_name, args->len + 1, "%.*s", args->len, args->value);
+                  LittleFS.rename("/modbustmp.json", tmp_name);
+                  client->route = 147;
+                } else{
+                  f->write(args->value, args->len);
+                }
+              }
+          } break;
+          case 146:{
+            if ((strcmp((char *)args->name, "modbuslist") == 0) ){
+              if (LittleFS.begin()) {
+                char   tmp_name[1+args->len];
+                memcpy (tmp_name, args->value,args->len);
+                tmp_name[args->len]='\0';
+                  if(LittleFS.remove(tmp_name)){
+                    sprintf_P(log_msg, PSTR("File deleted %s"), tmp_name);
+                  } else {
+                    sprintf_P(log_msg, PSTR("File %s delete failed "), tmp_name);
+                  }
+              }
+             }  
+            client->route=149;
+           } break;
+          case 148:{
+            if ((strcmp((char *)args->name, "modbuslist") == 0) ){    
+              if (LittleFS.begin()) {
+                char tmp_name[1+args->len];
+                memcpy (tmp_name, args->value,args->len);
+                tmp_name[args->len]='\0';
+                if((strcmp((char *)tmp_name, "/config.json") == 0)){
+                }else{
+                  client->userdata = new fs::File(LittleFS.open(tmp_name, "r"));
+                }   
+              }   
+            }
+           } break;
           case 150: {
               if (Update.isRunning() && (!Update.hasError())) {
                 if ((strcmp((char *)args->name, "md5") == 0) && (args->len > 0)) {
@@ -963,9 +1046,11 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
       } break;
     case WEBSERVER_CLIENT_HEADER: {
         struct arguments_t *args = (struct arguments_t *)dat;
+// loggingSerial.printf("\n%i  WEBSERVER_CLIENT_HEADER:step=%i substep=%i content=%i ROUTE=%i name=%s len=%i## value=%-50s##   ",__LINE__, client->step, client->substep,client->content,client->route,args->name, args->len, args->value);   
         return 0;
       } break;
     case WEBSERVER_CLIENT_WRITE: {
+//Serial.printf("\n%i  WEBSERVER_CLIENT_WRITE: step=%i  content=%i  ROUTE=%i ",__LINE__,client->step,client->content,client->route);
         switch (client->route) {
           case 0: {
               if (client->content == 0) {
@@ -1067,6 +1152,25 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
           case 140: {
               return showFirmware(client);
             } break;
+          case 142: { //#485
+            File *f = (File *)client->userdata;
+              if (f) {
+                if (*f) {
+                  f->close();
+                }
+              }
+               loggingSerial.printf("\n%ishowModbus WRITE 142 ",__LINE__);
+            } break;  
+          case 147: {
+              return showMdbusSuccess(client);
+            } break;
+          case 149: { 
+              return showModbus(client);  
+            } break;  
+          case 148: {
+            return showCountDef(client);
+            client->route=149;
+          }  break;
           case 150: {
               log_message((char*)"In /firmware client write part");
               if (Update.isRunning()) {
@@ -1108,6 +1212,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
       } break;
     case WEBSERVER_CLIENT_CREATE_HEADER: {
         struct header_t *header = (struct header_t *)dat;
+//Serial.printf("\n%i  WEBSERVER_CLIENT_CREATE_HEADER:client->step%i content=%i  ROUTE=%i ptr%X bufer=%s!!",__LINE__,client->step,client->content,client->route,header->ptr, header->buffer);
         switch (client->route) {
           case 113: {
               header->ptr += sprintf_P((char *)header->buffer, PSTR("Location: /settings"));
@@ -1131,6 +1236,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
         return 0;
       } break;
     case WEBSERVER_CLIENT_CLOSE: {
+//Serial.printf("\n%i  WEBSERVER_CLIENT_CLOSE:step=%i content=%i  ROUTE=%i",__LINE__,client->step,client->content ,client->route);
         switch (client->route) {
           case 100: {
               if (client->userdata != NULL) {
@@ -1143,6 +1249,16 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                 tmp = (struct websettings_t *)client->userdata;
                 client->userdata = ((struct websettings_t *)(client->userdata))->next;
                 free(tmp);
+              }
+            } break;
+          case 142: { //#485
+              if (client->userdata != NULL) {
+                File *f = (File *)client->userdata;
+                if (f) {
+                  if (*f) {
+                    f->close();
+                  }
+                }
               }
             } break;
           case 160:
@@ -1194,8 +1310,6 @@ void factoryReset() {
       yield();
     }
 #else
-    pixels.begin();
-    pixels.clear();
     while (true) {
      delay(100);
      pixels.setPixelColor(0, 128, 0, 0);
@@ -1221,13 +1335,13 @@ void setupSerial() {
   heatpumpSerial.flush();
 #endif
   if (heishamonSettings.logSerial1) { //settings are not loaded yet, this is the startup default
-    loggingSerial.begin(115200);
+    Serial.begin(115200);
     //debug line on serial1 (D4, GPIO2)
 #ifdef ESP32
     delay(100); //to let USB CDC to be opened if necessary
 #endif    
-    loggingSerial.print(F("Starting debugging, version: "));
-    loggingSerial.println(heishamon_version);
+    Serial.print(F("Starting debugging, version: "));
+    Serial.println(heishamon_version);
   }
 #if defined(ESP8266)
   else {
@@ -1264,6 +1378,20 @@ void switchSerial() {
   proxySerial.end();
   proxySerial.begin(9600, SERIAL_8E1,PROXYRX,PROXYTX);
   proxySerial.flush();  
+
+  if (heishamonSettings.modbusOn){ //#485
+    loggingSerial.printf("%i MODBUS port speed =%i will bee switched to 9600 \n",__LINE__,Serial.baudRate());
+    Serial.flush();
+    Serial.end();
+    Serial.begin(9600,SERIAL_8N1,LOGRX,LOGTX);
+  } else {
+    Serial.flush();
+    Serial.end();
+    Serial.begin(115200,SERIAL_8N1,LOGRX,LOGTX);
+  }
+
+
+  loggingSerial.printf("%i MODBUS port speed set to %i\n",__LINE__,Serial.baudRate());
 #endif
 
   setupGPIO(heishamonSettings.gpioSettings); //switch extra GPIOs to configured mode
@@ -1409,6 +1537,9 @@ void setup() {
 #else
   loggingSerial.println(F("Starting littlefs..."));
   if (LittleFS.begin(true)) {
+  //double reset detect from start -to protect against stored files errors
+    loggingSerial.println(F("Check for double reset...")); //#485
+    doubleResetDetect();
     loggingSerial.println(F("Started littlefs..."));
 #endif
     loggingSerial.println(F("Checking littlefs for first boot..."));
@@ -1436,8 +1567,6 @@ void setup() {
         yield();
       }
 #else
-      pixels.begin();
-      pixels.clear();
       while (true) {
         delay(50);
         pixels.setPixelColor(0, 128, 0, 0);
@@ -1449,9 +1578,7 @@ void setup() {
 #endif      
     }
   }
-  //double reset detect from start - removed, using boot button now
-  //loggingSerial.println(F("Check for double reset..."));
-  //doubleResetDetect();
+
 
   pinMode(BOOTPIN,INPUT_PULLUP); //enable the boot switch to be used as an input after booting
 
@@ -1467,7 +1594,7 @@ void setup() {
 
 #if defined(ESP32)
   loggingSerial.println(F("Setup ethernet module..."));
-  setupETH();   
+  setupETH();
 #endif
 
   loggingSerial.println(F("Setup MQTT..."));
@@ -1508,16 +1635,22 @@ void setup() {
   }
 
   loggingSerial.println(F("Enabling rules.."));
+  if (heishamonSettings.force_rules == false) {
+  listDir(LittleFS, "/", 3); //RS485
 #if defined(ESP8266)
   rst_info *resetInfo = ESP.getResetInfoPtr();
   loggingSerial.printf(PSTR("Reset reason: %d, exception cause: %d\n"), resetInfo->reason, resetInfo->exccause);
-  if (resetInfo->reason > 0 && resetInfo->reason < 4) {
+    if (resetInfo->reason > 0 && resetInfo->reason < 4) {
 #elif defined(ESP32)
-  esp_reset_reason_t reset_reason = esp_reset_reason(); 
-  loggingSerial.printf(PSTR("Reset reason: %d\n"), reset_reason);
-  if (reset_reason > 3 && reset_reason < 12) {  //is this correct for esp32?
+      esp_reset_reason_t reset_reason = esp_reset_reason();
+      loggingSerial.printf(PSTR("Reset reason: %d\n"), reset_reason);
+    if (reset_reason > 3 && reset_reason < 12) {  //is this correct for esp32?
 #endif  
-    loggingSerial.println("Not loading rules due to crash reboot!");
+        loggingSerial.println("Not loading rules due to crash reboot!");
+    } else {
+      rules_parse((char *)"/rules.txt");
+      rules_boot();
+    }
   } else {
     rules_parse((char *)"/rules.txt");
     rules_boot();
@@ -1530,9 +1663,11 @@ void setup() {
   pixels.setPixelColor(0, neoPixelState);
   pixels.show(); 
   #endif
+ 
+  setupModbus();//RS485
   //end of setup, clear double reset flag
   //loggingSerial.println(F("Clearing double reset flag.."));
-  //LittleFS.remove("/doublereset");  
+  LittleFS.remove("/doublereset");   //#485 clear double reset flag  //#485
   //loggingSerial.println(F("End of setup.."));
 
   inSetup = false;
@@ -1554,8 +1689,8 @@ void send_panasonic_query() {
     send_command(panasonicQuery, PANASONICQUERYSIZE);
     panasonicQuery[3] = 0x10; //setting 4th back to 0x10 for normal data request next time
   } else  {
-    if ((actData[0] == 0x71) && (actData[1] == 0xc8) && (actData[2] == 0x01) && (actData[193] == 0)  && (actData[195] == 0)  && (actData[197] == 0) ) { //do we have valid data but 0 value in heat consumptiom power, then assume K or L series
-    //can be replaced with: if ((actData[0] == 0x71) && (actData[0xc7] >= 3) ) { //do we have valid header and byte 0xc7 is more or equal 3 then assume K&L series
+    //if ((actData[0] == 0x71) && (actData[1] == 0xc8) && (actData[2] == 0x01) && (actData[193] == 0)  && (actData[195] == 0)  && (actData[197] == 0) ) { //do we have valid data but 0 value in heat consumptiom power, then assume K or L series
+    if ((actData[0] == 0x71) && (actData[0xc7] >= 3) ) { //do we have valid header and byte 0xc7 is more or equal 3 then assume K&L and more series
       log_message(_F("Assuming K or L heatpump type due to missing heat/cool/dhw power data"));
       extraDataBlockAvailable = true; //request for extra data next run
     }
@@ -1604,10 +1739,10 @@ void loop() {
   //webserver function
   webserver_loop();
 
+  readModbus(); //#485
   // check wifi
   check_wifi();
-
-  // Handle OTA first.
+  // Handle OTA first.s
   ArduinoOTA.handle();
 
   mqtt_client.loop();
@@ -1686,7 +1821,7 @@ void loop() {
     message += getWifiQuality();
     message += F("% (RSSI: ");
     message += WiFi.RSSI();
-    message += F(") WiFi (IP= ");// ver3.8 
+    message += F(") WiFi (IP= "); //#485
     message += WiFi.localIP().toString();
 #ifdef ESP32
     message += F(") ## Ethernet: ");
@@ -1696,7 +1831,6 @@ void loop() {
           message += F("connected (IP= ");
           message += ETH.localIP().toString();
           message += F(")");
-          // ver3.8 mayby the WiFi should be power down if?
         } else {
           message += F("connected (no IP)");
         }
@@ -1754,11 +1888,47 @@ void loop() {
     stats += timeoutread;
     stats += F(",\"version\":\"");
     stats += heishamon_version;
+    stats += F("\",\"board\":\"");
+#ifdef ESP8266
+    stats += F("ESP8266");
+#else
+    stats += F("ESP32");
+#endif
     stats += F("\",\"rules active\":");
     stats += nrrules;
     stats += F("}");
     sprintf_P(mqtt_topic, PSTR("%s/stats"), heishamonSettings.mqtt_topic_base);
     mqtt_client.publish(mqtt_topic, stats.c_str(), MQTT_RETAIN_VALUES);
+
+    //websocket stats
+#ifdef ESP32
+    String ethernetStat;
+    if (ETH.phyAddr() != 0) {        
+      if (ETH.connected()) {
+        if (ETH.hasIP()) {
+          ethernetStat = F("connected - IP: ");
+          ethernetStat += ETH.localIP().toString();
+          ethernetStat += F(")");
+        } else {
+          ethernetStat = F("connected - no IP");
+        }
+      } 
+      else {
+        ethernetStat = F("not connected");
+      }
+    } else {
+      ethernetStat = F("not installed");
+    }
+    char *getuptime = getUptime();
+    sprintf_P(log_msg, PSTR("{\"data\": {\"stats\": {\"wifi\": %d, \"ethernet\": \"%s\", \"memory\": %d, \"correct\": %.0f,\"mqtt\": %d,\"uptime\": \"%s\"}}}"), getWifiQuality(), ethernetStat.c_str(), getFreeMemory(), readpercentage, mqttReconnects, getuptime);
+    free(getuptime);    
+#else
+    char *getuptime = getUptime();
+    sprintf_P(log_msg, PSTR("{\"data\": {\"stats\": {\"wifi\": %d, \"memory\": %d, \"correct\": %.0f,\"mqtt\": %d,\"uptime\": \"%s\"}}}"), getWifiQuality(), getFreeMemory(), readpercentage, mqttReconnects, getuptime);    
+    free(getuptime);    
+#endif
+    
+    websocket_write_all(log_msg, strlen(log_msg));        
 
     //get new data
     if (!heishamonSettings.listenonly) send_panasonic_query();

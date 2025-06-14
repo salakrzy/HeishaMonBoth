@@ -2076,7 +2076,7 @@ uint8_t webserver_sync_receive(struct webserver_t *client, uint8_t *rbuffer, uin
 err_t webserver_async_receive(void *arg, tcp_pcb *pcb, struct pbuf *data, err_t err) {
   uint16_t size = 0;
   uint8_t i = 0;
-
+        loggingSerial.printf("\n%i WEBSERVER_CLIENT_receive",__LINE__);
   if(data == NULL) {
     for(i=0;i<WEBSERVER_MAX_CLIENTS;i++) {
       if(clients[i].data.pcb == pcb) {
@@ -2282,8 +2282,11 @@ void webserver_loop(void) {
         memset(&clients[i].data.buffer, 0, WEBSERVER_BUFFER_SIZE);
       } break;
       case WEBSERVER_CLIENT_ARGS:
+//loggingSerial.printf("\n%i WEBSERWER CLIENT_ARGS",__LINE__);
       case WEBSERVER_CLIENT_WEBSOCKET:
+//loggingSerial.printf("\n%i WEBSERWER CLIENT_WEBSOCKET",__LINE__);
       case WEBSERVER_CLIENT_READ_HEADER: {
+//loggingSerial.printf("\n%i READ_HEADER",__LINE__);        
         if(clients[i].data.client->connected() || clients[i].data.client->available()) {
           if(clients[i].data.client->available()) {
             uint8_t *p = (uint8_t *)rbuffer;
@@ -2303,6 +2306,7 @@ void webserver_loop(void) {
         }
       } break;
       case WEBSERVER_CLIENT_WRITE: {
+//loggingSerial.printf("\n%i WEBSERWER WRITE",__LINE__);
         if(clients[i].data.callback != NULL) {
           if(clients[i].data.step == WEBSERVER_CLIENT_WRITE) {
             if(clients[i].data.callback(&clients[i].data, NULL) == -1) {
