@@ -36,7 +36,8 @@ if (heishamonSettings.modbusOn){
 // RTUutils::prepareHardwareSerial(Serial);
 swSerial.begin(9600, EspSoftwareSerial::SWSERIAL_8N2, MODBUS_RX1_PIN, MODBUS_TX1_PIN, false,500,11);  //Set up Serial port for ModbusRTU 8N1 must be set the same on the Modbus device
 swSerial.enableIntTx(false);
-......*```
+......*
+```
 
 You can use the inteface with the DE/RE control pin but the module available on Aliexpress require replace 20k resistor with 120 ohm . Perhaps other implementations of this module do not require modification, but the one visible in the photo has resistor values R5 and R6 that are inconsistent with the MODBUS standard.
 
