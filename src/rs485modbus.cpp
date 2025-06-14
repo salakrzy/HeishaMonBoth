@@ -204,7 +204,7 @@ actModbDev=0;
         modbusDev[actModbDev].devAddress=jsonDoc["devAddress"];
         char Valuen[8];  
         for (int ii=0 ; (ii<MAX_MODBUS_VALUEARRAY); ii++){
-          memset(Valuen, 0, 10);
+          memset(Valuen, 0, 8);
           sprintf(Valuen,"Value%i",ii);
           modbusDev[actModbDev].Values[ii].address=jsonDoc[Valuen]["address"];
           modbusDev[actModbDev].Values[ii].divider=jsonDoc[Valuen]["divider"];

@@ -63,7 +63,7 @@ void getWifiScanResults(int numSsid) {
         continue;
       }
       JsonObject wifiJsonObject;
-      wifiJsonObject = wifiJsonArray.createNestedObject();
+      wifiJsonObject = wifiJsonArray.add<JsonObject>();
       wifiJsonObject["ssid"] = WiFi.SSID(indexes[i]);
       String quality = String(dBmToQuality(WiFi.RSSI(indexes[i]))) + "%";
       wifiJsonObject["rssi"] = quality;
