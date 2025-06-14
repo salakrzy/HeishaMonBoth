@@ -7,7 +7,6 @@ This Module use additional board to convert the RS485 RTU Modbus to RS232 Serial
 ### rs485modbus.h
 
 '''
-
 *#define MODBUS_REDE_PIN GPIO_NUM_21  // RE/DE  GPIO18 is used for RS485 direction control for halfduplex devices
 #define MODBUS_RX1_PIN GPIO_NUM_18  	
 #define MODBUS_TX1_PIN GPIO_NUM_19*
