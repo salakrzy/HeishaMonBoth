@@ -1,6 +1,6 @@
 # Modbus is the new module of HeishaMonBoth interface for RTU Modbus devices like Power Meter, Water Meter e.g.
 
-This Module use additional board to convert the RS485 RTU Modbus to RS232 Serial UART signals.
+This `Module` use additional board to convert the RS485 RTU Modbus to RS232 Serial UART signals.
 
 ## Modifications for SoftwareSerial
 
@@ -13,6 +13,7 @@ This Module use additional board to convert the RS485 RTU Modbus to RS232 Serial
 ```
 
 ### gpio.h
+
 ```
 struct gpioSettingsStruct {
 #if defined(ESP8266)
@@ -28,7 +29,9 @@ unsigned int gpioMode[NUMGPIO] = {OUTPUT,  OUTPUT,OUTPUT,INPUT_PULLUP, INPUT_PUL
 //GPIO1 pin2 ESP_GPIO_19   ESP_pin31  / RX for Software Serial
 //GPIO1 pin3 ESP_GPIO_18,  ESP_pin30  / DE/RE for Software Serial
 ```
+
 ### rs485modbus.cpp
+
 ```
 void setupModbus(){  // **************************************************************************************
 if (heishamonSettings.modbusOn){
@@ -52,10 +55,10 @@ or like this without flow control pins DE/RE
 
 <img src="assets/RS485toHMBconnection.jpg">
 
-The Modbus module use the "EspSoftwareSerial" librrary to create additional serial port to connect the RS485 converter to HeishModBoth. The transmission modbus Device parametters must be set to speed -**9600**, bits -**8**, parity -**None**, stop bits -**2** (**9600 8N2** ) and modbus device address must be set this same as the parameter "devAddress" in Modbusxxx.json config file.
+The Modbus module use the "`EspSoftwareSerial`" librrary to create additional serial port to connect the RS485 converter to HeishModBoth. The transmission modbus Device parametters must be set to speed -**`9600`**, bits-**`8`**, parity -**`None`**, stop bits -`**`2`** (**9600 8N2** ) and modbus device address must be set this same as the parameter "devAddress" in Modbusxxx.json config file.
 It is also possible to connect the MODBU converter interface to the hardware UART0 port, however, this requires blocking the sending of logs to this port.
 
-From the 3.8.1 verison, HeishaMonBoth allows send and handling up to 4 queries to the same device or up to 4 different Modbus devices connected to this same bus, depending what the device address is set by parameter "devAddress". Each Modbusxxx.json file define one query and his name must start from Modbus  word eg Modbus12.json, Modbus3new,json. Each query allows handling up to 16 measured values from the device response. So you can read 16 values from each 4 different devices, 64 values from 1 device or any other combinations defined by the user. The user can define queries for non-standard devices by himself using the description of how to create and upload modbusxxx.json files to the board. The software supports up to 4 Modbusxxx.json files, if more than 4 counter definitions are uploaded only the first 4 will be used and the rest will be ignored.
+From the 3.8.1 verison, `HeishaMonBoth` allows send and handling up to 4 queries to the same device or up to 4 different Modbus devices connected to this same bus, depending what the device address is set by parameter "devAddress". Each Modbusxxx.json file define one query and his name must start from Modbus  word eg Modbus12.json, Modbus3new,json. Each query allows handling up to 16 measured values from the device response. So you can read 16 values from each 4 different devices, 64 values from 1 device or any other combinations defined by the user. The user can define queries for non-standard devices by himself using the description of how to create and upload modbusxxx.json files to the board. The software supports up to 4 Modbusxxx.json files, if more than 4 counter definitions are uploaded only the first 4 will be used and the rest will be ignored.
 
 For convenience and to check the correctness of the definition, it is worth using Online tools to verify the correctness of the JSON file
 
