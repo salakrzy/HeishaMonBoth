@@ -1,23 +1,28 @@
 # HeishaMonBoth Ver 3.9_a changelog
 
-Stability and performance improvements.
-When the RJ45cable i connected and the Ethernet interface has got IP address the WiFi interface is go down to reduce power consumpion.
-Automatic selection of a strongest signal if the network uses APs with the same SSID or the network is of the MESH type.
-Changing the flash memory partition table to follow backtrace errors messages
-Compatibile Integration ver 3.9 with HomeAssistant  [https://github.com/kamaradclimber/heishamon-homeassistant/](https://github.com/kamaradclimber/heishamon-homeassistant/)
+* Stability and performance improvements.
+
+* When the RJ45cable i connected and the Ethernet interface has got IP address the WiFi interface is go down to reduce power consumpion.
+
+* Automatic selection of a strongest signal if the network uses APs with the same SSID or the network is of the MESH type.
+
+* Changing the flash memory partition table to follow backtrace errors messages.
+
+* Compatibile Integration ver 3.9 with HomeAssistant  [https://github.com/kamaradclimber/heishamon-homeassistant/](https://github.com/kamaradclimber/heishamon-homeassistant/)
 
 ## 485 Modbus
 
-To reduce modbus errors now Modbus port run on hardware UART and logingmessages are redirected to SoftwareSerial port.
-On begining the RxD0 and TxD0 are used to UART0 Rx and Tx. When checkbox Modbus in settings is set to On the hrdware UART0 is redirected to
-GPIO23 (Rx) and GPIO21(Tx)
+* To reduce modbus errors now Modbus port run on hardware UART and logingmessages are redirected to SoftwareSerial port.
 
-The register definitions of the MOdbus device are user-configurable and stored in the ESP32 flash memory.
-You can download MOdbusxx.json file with your own counters definition to the flash memory in Modbus section.
+* On begining the RxD0 and TxD0 are used to UART0 Rx and Tx. When checkbox Modbus in settings is set to On the hrdware UART0 is redirected to GPIO23 (Rx) and GPIO21(Tx).
+
+* The register definitions of the MOdbus device are user-configurable and stored in the ESP32 flash memory.
+  You can download MOdbusxx.json file with your own counters definition to the flash memory in Modbus section.
 
 ## New and Old PCB
 
 This 3.9_a version is compatible with both the old and new PCB versions. Settings allows you to configure which board version the software will work with.
+
 Default configuration is set to newPCB.
 
 ![](assets/HMBModbus&W5500.jpg)
