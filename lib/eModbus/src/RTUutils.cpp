@@ -169,7 +169,7 @@ void RTUutils::send(Stream& serial, unsigned long& lastMicros, uint32_t interval
     // Toggle rtsPin, if necessary
     rts(LOW);
   }
-
+delay(2); // IMPORTANT NOT DELETE !!! Ensure inter-message delay
   HEXDUMP_D("Sent packet", data, len);
 
   // Mark end-of-message time for next interval
@@ -222,16 +222,17 @@ ModbusMessage RTUutils::receive(uint8_t caller, Stream& serial, uint32_t timeout
           // Yes. Note the time.
           lastMicros = micros();
           // Do we need to skip it, if it is zero?
-          if (b > 0 || !skipLeadingZeroBytes) {
+//          if (b > 0 || !skipLeadingZeroBytes) {
             // No, we can go process it regularly
             buffer[bufferPtr++] = b;
             state = IN_PACKET;
-          } 
+//          } 
         } else {
           // No, we had no byte. Just check the timeout period
           if (millis() - TimeOut >= timeout) {
             rv.push_back(TIMEOUT);
             state = FINISHED;
+          delay(2); // DO not REMOVE killcrash No data received, so give the task scheduler room to breathe, if loop task are very short e.g just after boot it can make crash
           }
           delay(1);
         }
@@ -264,6 +265,7 @@ ModbusMessage RTUutils::receive(uint8_t caller, Stream& serial, uint32_t timeout
               break;
             }
           }
+
         }
         break;
       // DATA_READ: successfully gathered some data. Prepare return object.
@@ -277,6 +279,7 @@ ModbusMessage RTUutils::receive(uint8_t caller, Stream& serial, uint32_t timeout
           if (!validCRC(buffer, bufferPtr)) {
             // Ooops. CRC is wrong.
             rv.push_back(CRC_ERROR);
+            
           } else {
             // CRC was fine, Now allocate response object without the CRC
             for (uint16_t i = 0; i < bufferPtr - 2; ++i) {
@@ -433,9 +436,9 @@ ModbusMessage RTUutils::receive(uint8_t caller, Stream& serial, uint32_t timeout
   }
   // Deallocate buffer
   delete[] buffer;
-
+ delay(2); // IMPORTANT NOT DELETE !!! Ensure inter-message delay
   LOG_D("%c/", (const char)caller);
-  HEXDUMP_D("Received packet", rv.data(), rv.size());
+ // HEXDUMP_D("Received packet", rv.data(), rv.size());
 
   return rv;
 }

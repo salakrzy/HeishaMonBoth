@@ -14,7 +14,7 @@
 
 #include "mem.h"
 #include "../../webfunctions.h"
-
+extern Stream *SerialMonitor; //redirect Serial to loggingSerial
 extern settingsStruct heishamonSettings;
 extern PubSubClient mqtt_client;
 extern const char* mqtt_logtopic;
@@ -26,9 +26,9 @@ void _logprintln(const char *file, unsigned int line, char *msg) {
     Serial1.print(": ");
     Serial1.println(msg);
 #elif defined(ESP32)
-    Serial.print(millis());
-    Serial.print(": ");
-    Serial.println(msg);
+    SerialMonitor->print(millis());
+    SerialMonitor->print(": ");
+    SerialMonitor->println(msg);
 #endif	  
   }
   websocket_write_all(msg, strlen(msg));

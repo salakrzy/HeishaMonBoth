@@ -8,60 +8,63 @@
 #include <ESP32WebServer.h>
 #include <WiFi.h>
 #include "src\common\webserver.h"
-#include <SoftwareSerial.h>
 #include "webfunctions.h"
+
+#define DEBUG 0
+
 extern bool data_ready;
 extern PubSubClient mqtt_client;
-//extern EspSoftwareSerial::UART swSerial;
 extern settingsStruct heishamonSettings;
+
+extern Stream *SerialMonitor; //redirect Serial to loggingSerial
+ModbusClientRTU ModbGate(-1); 	//ModbusClientRTU ModbGate(MODBUS_REDE1_PIN);  if you want to use half duplex conwerter TTL to RS485
+t_modbusDev modbusDev[MAX_MODBUS_DEVICES];  // declare dynamic Array for modbusDevices
+File root1;
+
 bool data_ready = false;
 float powerRead[120];
 int numModbDev=0;
 int actModbDev;   // start ask from first modbus device
 int errors = 1;  // count errors number 
 uint32_t modbus_request_time ;	
-#define DEBUG 1
-
-ModbusClientRTU ModbGate(-1); 	//ModbusClientRTU ModbGate(MODBUS_REDE1_PIN);  if you want to use half duplex conwerter TTL to RS485
-t_modbusDev modbusDev[MAX_MODBUS_DEVICES];  // declare dynamic Array for modbusDevices
 uint8_t * buf;
-File root1;
+
+void changeSerialToLogging(){ // ***********************************************************************************************
+  SerialMonitor=&Serial;
+}
 
 void setupModbus(){  // ***********************************************************************************************
   if (heishamonSettings.modbusOn){
-   loggingSerial.end();
-    RTUutils::prepareHardwareSerial(Serial);
-    loggingSerial.begin(9600, SERIAL_8N1, LOGRX,LOGTX);  //Set up Serial port for ModbusRTU 8N1 must be set the same on the Modbus device
+    ModbusMessage(256);
     ModbGate.onDataHandler(&handleData1); 	// Set up ModbusRTU client - provide onData handler function	
     ModbGate.onErrorHandler(&handleError);	// - provide onError handler function
     ModbGate.setTimeout(1000);			// Set message timeout value in milliseconds, how long we wait for device answer
-    ModbGate.begin(Serial);	//  ModbGate.begin(Serial,1);	Start ModbusRTU background task on CPU number 1
+    ModbGate.begin(Serial);	//  ModbGate.begin(Serial,1);	Start ModbusRTU background task on CPU number 1 
     InitModbusDev (); //  InitModbusDev ( MODBUS_REDE_PIN) for converter required  direction control for halfduplex devices
-    loggingSerial.printf("Setup Modbus detected  %i files with counters definitions only 4 first will be used\n",numModbDev);
+    SerialMonitor->printf("Setup Modbus detected  %i files with counters definitions only 4 first will be used\n",numModbDev);
     actModbDev=0;
   } else{
-      loggingSerial.updateBaudRate(115200); //Set up Serial port for better monitor speed
-//     loggingSerial.begin(115200, SERIAL_8N1, LOGRX,LOGTX);
+    ModbGate.end(); 
   }
     int speed=Serial.baudRate();
     String komunik="UART0 monitor setting baud rate set to ";
     komunik=komunik+speed;
-  log_message((char*)komunik.c_str());
-  loggingSerial.printf("\n%c %i Setup MODBUS port speed to %i\n", __FUNCTION__ ,__LINE__,Serial.baudRate());
+    log_message((char*)komunik.c_str());
+    SerialMonitor->printf("\n%c %i Setup MODBUS port speed to %i\n", __FUNCTION__ ,__LINE__,Serial.baudRate());
 }
 
 void readFile(fs::FS &fs, String  path){ // **********************************************************************
-  loggingSerial.printf("Reading file: %s\r\n", path);
+  SerialMonitor->printf("Reading file: %s\r\n", path);
   File file = fs.open(path);
   if(!file || file.isDirectory()){
-    loggingSerial.println("- failed to open file for reading");
+    SerialMonitor->println("- failed to open file for reading");
     return;
   }
-  loggingSerial.println("- read from file:");
+  SerialMonitor->println("- read from file:");
   while(file.available()){
-    loggingSerial.write(file.read());
+    SerialMonitor->write(file.read());
   }
-  loggingSerial.write("\n");
+  SerialMonitor->write("\n");
   file.close();
 }
 
@@ -77,7 +80,7 @@ String printDirectory(File dir, int numTabs) { // ******************************
        break;
      }
      for (uint8_t i=0; i<numTabs; i++) {
-       loggingSerial.print('\t');   // we'll have a nice indentation
+       SerialMonitor->print('\t');   // we'll have a nice indentation
      }
      // Recurse for directories, otherwise print the file size
      if (entry.isDirectory()) {
@@ -94,29 +97,29 @@ String printDirectory(File dir, int numTabs) { // ******************************
 
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels){/**************************************************** */
-  loggingSerial.printf("Listing directory: %s\r\n", dirname);
+  SerialMonitor->printf("Listing directory: %s\r\n", dirname);
   File root = fs.open(dirname);
   if(!root){
-      loggingSerial.println("- failed to open directory");
+      SerialMonitor->println("- failed to open directory");
       return;
   }
   if(!root.isDirectory()){
-      loggingSerial.println(" - not a directory");
+      SerialMonitor->println(" - not a directory");
       return;
   }
   File file = root.openNextFile();
   while(file){
     if(file.isDirectory()){
-        loggingSerial.print("  DIR : ");
-        loggingSerial.println(file.name());
+        SerialMonitor->print("  DIR : ");
+        SerialMonitor->println(file.name());
         if(levels){
             listDir(fs, file.path(), levels -1);
         }
     } else {
-        loggingSerial.print("  FILE: ");
-        loggingSerial.print(file.name());
-        loggingSerial.print("\tSIZE: ");
-        loggingSerial.println(file.size());
+        SerialMonitor->print("  FILE: ");
+        SerialMonitor->print(file.name());
+        SerialMonitor->print("\tSIZE: ");
+        SerialMonitor->println(file.size());
     }
     file = root.openNextFile();
   }
@@ -171,6 +174,7 @@ errmessage+=(int ) me;
 errmessage+= F("- ");
 errmessage+=(const char *)me;
 log_message((char*)errmessage.c_str());
+mqtt_client.publish("modbuserror",(char*)errmessage.c_str(),1);
 digitalWrite(LED_BUILTIN, LOW);
 }
 
@@ -178,7 +182,7 @@ void InitModbusDev (){  //******************************************************
 numModbDev=0;
 JsonDocument jsonDoc;
 if (LittleFS.begin()) {
-  loggingSerial.print("LittleFS volumen opened\n");
+  SerialMonitor->print("LittleFS volumen opened\n");
 File root = LittleFS.open("/");
 File file = root.openNextFile();
 actModbDev=0;
@@ -186,14 +190,14 @@ actModbDev=0;
     String modbusDef = file.name();
     modbusDef="/"+modbusDef;
     int size = file.size();
-    loggingSerial.printf("File name= /%s   size= %i\n",modbusDef,size);
+    SerialMonitor->printf("File name= /%s   size= %i\n",modbusDef,size);
     if(modbusDef.startsWith("/modbus")){
       file=LittleFS.open(modbusDef,"r");
       std::unique_ptr<char[]> buf(new char[size]);
       file.readBytes(buf.get(), size);
       DeserializationError error = deserializeJson(jsonDoc, buf.get());
       if (error) {
-        loggingSerial.printf("deserializeJson() failed with code %s\n", error.code());
+        SerialMonitor->printf("deserializeJson() failed with code %s\n", error.code());
       }
      else {
       if( actModbDev<MAX_MODBUS_DEVICES){
@@ -260,15 +264,16 @@ void modbusSendMSG( int actModbDevact){
 
 void  readModbus(){  //***********************************************************************************************
 if(heishamonSettings.modbusOn and (numModbDev>0) ){
-    if (Serial.baudRate()>9700){   
-     loggingSerial.updateBaudRate(9600);
-//     loggingSerial.begin(9600, SERIAL_8N1, LOGRX,LOGTX);
+/*    if (Serial.baudRate()>9700){   
+//     SerialMonitor->updateBaudRate(9600);
+//     SerialMonitor->begin(9600, SERIAL_8N1, LOGRX,LOGTX);
     int speed=Serial.baudRate();
     String komunik="UART0 monitor setting baud rate set to ";
     komunik=komunik+speed;
       log_message((char*)komunik.c_str());
-      loggingSerial.printf("%s  %i nMODBUS speed=%i\n",__FUNCTION__,__LINE__,Serial.baudRate());
+      SerialMonitor->printf("%s  %i nMODBUS speed=%i\n",__FUNCTION__,__LINE__,Serial.baudRate());
     }
+    */
     static uint32_t next_request = millis();
     if ((millis() - next_request > MODBUS_READ_TIMER) and (data_ready == false)) {  // and !data_redy dodac warunek że jeżeli jeszcze nie przekazano danych to nie pytac o nowe dane
       if(actModbDev>=numModbDev ) actModbDev=0;  // all devices asked and start again ask for first device
@@ -280,14 +285,14 @@ if(heishamonSettings.modbusOn and (numModbDev>0) ){
       }
       next_request = millis();
     }
-  }else if (!heishamonSettings.modbusOn and loggingSerial.baudRate()< 110000){
-    loggingSerial.updateBaudRate(115200);
-//    loggingSerial.begin(115200, SERIAL_8N1, LOGRX,LOGTX);
+  }else if (!heishamonSettings.modbusOn and Serial.baudRate()< 110000){
+//  SerialMonitor->updateBaudRate(115200);
+//    SerialMonitor->begin(115200, SERIAL_8N1, LOGRX,LOGTX);
     int speed=Serial.baudRate();
     String komunik="UART0 monitor setting baud rate set to ";
     komunik=komunik+speed;
     log_message((char*)komunik.c_str());
-    loggingSerial.printf("\n %s  %i nMODBUS speed=%i\n",__FUNCTION__,__LINE__,Serial.baudRate());
+    SerialMonitor->printf("\n %s  %i nMODBUS speed=%i\n",__FUNCTION__,__LINE__,Serial.baudRate());
   }
 }
 
@@ -307,19 +312,22 @@ void handleData1(ModbusMessage response, uint32_t token) {  //******************
         uint16_t offs = 3;   // First data starts from 4th byte, after server ID byte, function code byte and data length byte
         for (uint8_t i = 0; i < words; i++) {
           offs = response.get(offs, powerRead[i]);
+          delay(20);
         }
-//        if(DEBUG) loggingSerial.printf("numbers answer bytes declared in answer =  %i   number received bytes =  %i\n",words,2*modbusDev[actModbDev].numb_registers);
+       if(DEBUG) SerialMonitor->printf("numbers answer bytes declared in answer =  %i   number received bytes =  %i\n",words,2*modbusDev[actModbDev].numb_registers);
         data_ready = true;
         modbusSendMQTT(actModbDev);
       }
       else {
-        loggingSerial.printf("read bad nembers registers expected= %i   read= %i\n",words,2*modbusDev[actModbDev].numb_registers);
+        SerialMonitor->printf("read bad nembers registers expected= %i   read= %i\n",words,2*modbusDev[actModbDev].numb_registers);
       }
       modbusSendMSG( actModbDev);
   }
   else{log_message(_F("read other token than expected"));
   }
-  //if(DEBUG) for (int j = 0; j < 40; j++) loggingSerial.printf("rej=%i; real= %8.4f    ", j,powerRead[j]);
+  if(DEBUG){ for (int j = 0; j < 40; j++) SerialMonitor->printf("rej=%i; real= %8.4f    ", j,powerRead[j]);
+    SerialMonitor->printf("\n");
+  }
   actModbDev++;
 }
 

@@ -2,13 +2,6 @@
 #include "src/common/webserver.h"
 
 #define NUM_S0_COUNTERS 2
-#if defined(ESP8266)
-#define DEFAULT_S0_PIN_1 12 
-#define DEFAULT_S0_PIN_2 14 
-#elif defined(ESP32)
-#define DEFAULT_S0_PIN_1 22		//ver3.8
-#define DEFAULT_S0_PIN_2 23   //ver3.8
-#endif
 
 struct s0SettingsStruct {
   byte gpiopin = 255;
@@ -29,7 +22,7 @@ struct s0DataStruct {
   unsigned int avgPulseWidth = 0;
 };
 
-void initS0Sensors(s0SettingsStruct s0Settings[]);
+void initS0Sensors(s0SettingsStruct s0Settings[],bool newPCB);
 void restore_s0_Watthour(int s0Port, float watthour);
 void s0Loop(PubSubClient &mqtt_client, void (*log_message)(char*), char* mqtt_topic_base, s0SettingsStruct s0Settings[]);
 void s0JsonOutput(struct webserver_t *client);

@@ -30,7 +30,7 @@ struct settingsStruct {
   uint16_t dallasResolution = 12; // dallas temp resolution (9 to 12)
   uint16_t updateAllTime = 300; // how often all data is resend to mqtt
   uint16_t updataAllDallasTime = 300; //how often all 1wire data is resent to mqtt
-  uint16_t timezone = 0;
+  uint16_t timezone = 374;
 
   const char* update_path = "/firmware";
   const char* update_username = "admin";
@@ -52,12 +52,13 @@ struct settingsStruct {
   bool use_s0 = false; //s0 enabled?
   bool logMqtt = false; //log to mqtt from start
   bool logHexdump = false; //log hexdump from start
-  bool logSerial1 = true; //log to serial1 (gpio2) from start
+  bool logSerial1 = true; //log to serial1 (gpio2) from start kill UWAGA JAK JEST FALSE TO NASTĘPUJA RESTARTY DO weryfikacji
   bool opentherm = false; //opentherm enable flag
   bool hotspot = true; //enable wifi hotspot when wifi is not connected
 #ifdef ESP32
   bool proxy = true; //cztaw proxy port enable flag
   bool modbusOn = false; //enable Modbus
+  bool newPCB = true; //use new PCB with RS485 and S0
 #endif
   s0SettingsStruct s0Settings[NUM_S0_COUNTERS];
   gpioSettingsStruct gpioSettings;

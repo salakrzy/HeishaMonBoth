@@ -62,8 +62,7 @@ void getWifiScanResults(int numSsid) {
       if (indexes[i] == -1) {
         continue;
       }
-      JsonObject wifiJsonObject;
-      wifiJsonObject = wifiJsonArray.add<JsonObject>();
+      JsonObject wifiJsonObject = wifiJsonArray.add<JsonObject>();
       wifiJsonObject["ssid"] = WiFi.SSID(indexes[i]);
       String quality = String(dBmToQuality(WiFi.RSSI(indexes[i]))) + "%";
       wifiJsonObject["rssi"] = quality;
@@ -230,9 +229,10 @@ void loadSettings(settingsStruct *heishamonSettings) {
 #ifdef ESP32          
           heishamonSettings->proxy = ( jsonDoc["proxy"] == "enabled" ) ? true : false;
           heishamonSettings->modbusOn = ( jsonDoc["modbusOn"] == "enabled" ) ? true : false;
+          heishamonSettings->newPCB = ( jsonDoc["newPCB"] == "enabled" ) ? true : false;
 #endif          
           if ( jsonDoc["waitTime"]) heishamonSettings->waitTime = jsonDoc["waitTime"];
-          if (heishamonSettings->waitTime < 5) heishamonSettings->waitTime = 5; //#Jacek
+          if (heishamonSettings->waitTime < 5) heishamonSettings->waitTime = 5; 
           if ( jsonDoc["waitDallasTime"]) heishamonSettings->waitDallasTime = jsonDoc["waitDallasTime"];
           if (heishamonSettings->waitDallasTime < 5) heishamonSettings->waitDallasTime = 5;
           if ( jsonDoc["dallasResolution"]) heishamonSettings->dallasResolution = jsonDoc["dallasResolution"];
@@ -357,7 +357,7 @@ int handleFactoryReset(struct webserver_t *client) {
         webserver_send_content_P(client, webFooter, strlen_P(webFooter));
       } break;
     case 2: {
-        timerqueue_insert(1, 0, -1); // Start reboot sequence
+        timerqueue_insert(3 , 0, -1); // Start reboot sequence
       } break;
   }
 
@@ -457,6 +457,11 @@ void settingsToJson(JsonDocument &jsonDoc, settingsStruct *heishamonSettings) {
   } else {
     jsonDoc["modbusOn"] = "disabled";
   }
+  if (heishamonSettings->newPCB) {
+    jsonDoc["newPCB"] = "enabled";
+  } else {
+    jsonDoc["newPCB"] = "disabled";
+  }
 #endif 
   jsonDoc["waitTime"] = heishamonSettings->waitTime;
   jsonDoc["waitDallasTime"] = heishamonSettings->waitDallasTime;
@@ -500,6 +505,7 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
 #ifdef ESP32  
   jsonDoc["proxy"] = String("disabled");
   jsonDoc["modbusOn"] = String("disabled");  
+  jsonDoc["newPCB"] = String("disabled");
 #endif  
   jsonDoc["use_1wire"] = String("disabled");
   jsonDoc["use_s0"] = String("disabled");
@@ -546,6 +552,8 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
       jsonDoc["proxy"] = tmp->value;
     } else if (strcmp(tmp->name.c_str(), "modbusOn") == 0) {
       jsonDoc["modbusOn"] = tmp->value;
+    } else if (strcmp(tmp->name.c_str(), "newPCB") == 0) {
+      jsonDoc["newPCB"] = tmp->value;
 #endif      
     } else if (strcmp(tmp->name.c_str(), "ntp_servers") == 0) {
       jsonDoc["ntp_servers"] = tmp->value;
@@ -843,6 +851,9 @@ int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings) {
         webserver_send_content(client, str, strlen(str));
         webserver_send_content_P(client, PSTR(",\"modbusOn\":"), 12);
         itoa(heishamonSettings->modbusOn, str, 10);
+        webserver_send_content(client, str, strlen(str));
+        webserver_send_content_P(client, PSTR(",\"newPCB\":"), 10);
+        itoa(heishamonSettings->newPCB, str, 10);
         webserver_send_content(client, str, strlen(str));
 #endif      
         webserver_send_content_P(client, PSTR(",\"use_1wire\":"), 13);

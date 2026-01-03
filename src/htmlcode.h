@@ -9,7 +9,7 @@ static const char refreshMeta[] PROGMEM = "<meta http-equiv=\"refresh\" content=
 static const char webBodyStart[] PROGMEM =
   "<body>"
   "<button class=\"w3-button w3-red w3-xlarge w3-left\" onclick=\"openLeftMenu()\">&#9776;</button>"
-  "<header class=\"w3-container w3-card w3-theme\"><h1>HeishaMonBoth monitor</h1></header>";//####ESP32
+  "<header class=\"w3-container w3-card w3-theme\"><h1>HeishaMonBoth monitor v3.9a</h1></header>";//####ESP32
 
 static const char webFooter[] PROGMEM  = "</body></html>";
 static const char menuJS[] PROGMEM =
@@ -45,10 +45,10 @@ static const char websocketJS[] PROGMEM =
   "  }" 
   "  function startWebsockets() {"
   "    if(typeof MozWebSocket != \"undefined\") {"
-  "      oWebsocket = new MozWebSocket(\"ws://\" + location.host + \":80\");"
+  "      oWebsocket = new MozWebSocket(\"ws://\" + location.host);"
   "    } else if(typeof WebSocket != \"undefined\") {"
   "      /* The characters after the trailing slash are needed for a wierd IE 10 bug */"
-  "      oWebsocket = new WebSocket(\"ws://\" + location.host + \":80/ws\");"
+  "      oWebsocket = new WebSocket(\"ws://\" + location.host + \"/ws\");"
   "    }"
   ""
   "    if(oWebsocket) {"
@@ -1162,6 +1162,13 @@ static const char settingsForm2[] PROGMEM =
   "          Enable Modbus port:</td>"
   "        <td style=\"text-align:left\">"
   "          <input type=\"checkbox\" name=\"modbusOn\" value=\"enabled\">"
+  "        </td>"
+  "      </tr>"
+    "      <tr>"
+  "        <td style=\"text-align:right; width: 50%\">"
+  "          New version PCB:</td>"
+  "        <td style=\"text-align:left\">"
+  "          <input type=\"checkbox\" name=\"newPCB\" value=\"enabled\">"
   "        </td>"
   "      </tr>"
   "    </table>"

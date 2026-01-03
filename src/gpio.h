@@ -3,7 +3,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiGratuitous.h>
 #elif defined(ESP32)
-#define NUMGPIO 7
+#define NUMGPIO 6
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <Update.h>
@@ -18,8 +18,8 @@ struct gpioSettingsStruct {
   unsigned int gpioPin[NUMGPIO] = {1, 3, 16};
   unsigned int gpioMode[NUMGPIO] = {INPUT_PULLUP, INPUT_PULLUP, INPUT_PULLUP};
 #elif defined(ESP32)
-  unsigned int gpioPin[NUMGPIO] = {5,18,19,21,22,23,32};
-  unsigned int gpioMode[NUMGPIO] = {OUTPUT,  OUTPUT,OUTPUT,INPUT_PULLUP, INPUT_PULLUP, INPUT_PULLUP, INPUT_PULLUP, };
+  unsigned int gpioPin[NUMGPIO] = {4,5,18,19,22,32};
+  unsigned int gpioMode[NUMGPIO] = {INPUT_PULLUP, INPUT_PULLUP, OUTPUT,OUTPUT, INPUT_PULLUP, INPUT_PULLUP, };
 #endif
 };
 

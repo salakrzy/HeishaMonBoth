@@ -66,9 +66,17 @@ IRAM_ATTR void onS0Pulse2Change() {
 }
 
 
-void initS0Sensors(s0SettingsStruct s0Settings[]) {
+void initS0Sensors(s0SettingsStruct s0Settings[],bool newPCB) {
+byte DEFAULT_S0_PIN_1;
+byte DEFAULT_S0_PIN_2;
+if (newPCB==LOW){ //DigitalRead(5) if LOW means old PCB is used
+   DEFAULT_S0_PIN_1=22;
+   DEFAULT_S0_PIN_2=15;
+} else{
+   DEFAULT_S0_PIN_1=22;
+   DEFAULT_S0_PIN_2=23;
+}
   //setup s0 port 1
-
   //TODO: check if this is still necessary
   //actS0Settings[0].gpiopin = s0Settings[0].gpiopin;
   actS0Settings[0].gpiopin = DEFAULT_S0_PIN_1;

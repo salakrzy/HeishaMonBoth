@@ -1,3 +1,48 @@
+# HeishaMonBoth Ver 3.9_a changelog
+
+Stability and performance improvements.
+When the RJ45cable i connected and the Ethernet interface has got IP address the WiFi interface is go down to reduce power consumpion.
+Automatic selection of a strongest signal if the network uses APs with the same SSID or the network is of the MESH type.
+Changing the flash memory partition table to follow backtrace errors messages
+Compatibile Integration ver 3.9 with HomeAssistant  [https://github.com/kamaradclimber/heishamon-homeassistant/](https://github.com/kamaradclimber/heishamon-homeassistant/)
+
+## 485 Modbus
+
+To reduce modbus errors now Modbus port run on hardware UART and logingmessages are redirected to SoftwareSerial port.
+On begining the RxD0 and TxD0 are used to UART0 Rx and Tx. When checkbox Modbus in settings is set to On the hrdware UART0 is redirected to
+GPIO23 (Rx) and GPIO21(Tx)
+
+The register definitions of the MOdbus device are user-configurable and stored in the ESP32 flash memory.
+You can download MOdbusxx.json file with your own counters definition to the flash memory in Modbus section.
+
+## New and Old PCB
+
+This 3.9_a version is compatible with both the old and new PCB versions. Settings allows you to configure which board version the software will work with.
+Default configuration is set to newPCB.
+
+![](assets/HMBModbus&W5500.jpg)
+
+#### The new PCB works with:
+
+* W5500 Ethernet module
+* RS485 to TTL module
+* Dallas DS1820 temperature sensor
+* I2C Display (only MODBUS version under construction)
+* two S0 pins
+
+#### The new board can be:
+
+* powered via USB-C
+* mounted in a dedicated enclosure (stl files are in Doc section )
+* mounted in a 54mm DIN rail enclosure
+
+![](assets/DIN_Case&Display2.jpg)
+
+#### The new PCB with HMBModbus software can communicate with wall control panels via Modbus.
+
+The HMBModbus software has implemented the IntenesisBox PAW-AW-MBS-H interface messages and full TOP and SET HeishaMon Topics.
+The description of the Modbus registers that can be used can be found in the /DOC/newPCB tab.
+
 # HeishaMonBoth Ver 3.9 changelog
 
 ### ## Version 3_9 supports 12 new parameters.
@@ -19,7 +64,7 @@
 
 The user can define support for up to 4 MODBUS devices. Details on how to connect the interface and define register reading are included in the ModbusDoc folder. Currently, readings are visible in the Console tab and sent to the MQTT server. Readings are performed every 10 seconds (MODBUS_READ_TIMER = 10).If there are any needs for changes, please report them in Issues.
 
-______________________________________________________________________________________________________
+---
 
 # HeishaMonBoth Ver 3.8 changelog
 
@@ -93,7 +138,8 @@ Some ESP32 processor versions have only 1 core instead of 2. You have to pay att
 OpenTherm and Optional PCB and Rules features should work but havn't been tested.
 Oficial published Librrary OneWire has the error in file **OneWire_direct_gpio.h** It is described there https://github.com/PaulStoffregen/OneWire/pull/134/commits/da50f912a8282dacf381d006e75e0141df2a931c)
 I recomend use the file **OneWire_direct_gpio.h** from direcotry OneWire\util.
-_______________________________________________________________________________________________________
+
+---
 
 # HeishaMonBoth 3.2 changelog
 

@@ -57,6 +57,7 @@
 #endif
 #include "../../webfunctions.h"
 extern settingsStruct heishamonSettings;
+extern Stream *SerialMonitor; //redirect Serial to loggingSerial
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #ifndef ERR_OK
   #define ERR_OK 0
@@ -65,7 +66,7 @@ extern settingsStruct heishamonSettings;
 #if defined(ESP8266)
   #define loggingSerial Serial1
 #elif defined(ESP32)
-  #define loggingSerial Serial //usb serial CDC
+//  #define loggingSerial Serial //usb serial CDC
 #endif
 
 
@@ -82,7 +83,7 @@ static uint8_t *rbuffer = NULL;
 static uint16_t tcp_write_P(tcp_pcb *pcb, PGM_P buf, uint16_t len, uint8_t flags) {
   char *str = (char *)malloc(len+1);
   if(str == NULL) {
-    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   }
@@ -689,7 +690,7 @@ int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *l
               memcpy(tmp, &client->buffer[x+1], args.len);
               if((client->data.websockkey = strdup(tmp)) == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-                loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+                SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
                 ESP.restart();
                 exit(-1);
 #endif
@@ -708,7 +709,7 @@ int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *l
                   tmp[args.len-pos] = 0;
                   if((client->data.boundary = strdup(tmp)) == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-                    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+                    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
                     ESP.restart();
                     exit(-1);
 #endif
@@ -1632,7 +1633,7 @@ void webserver_send_content_P(struct webserver_t *client, PGM_P buf, uint16_t si
   /*LCOV_EXCL_START*/
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   #endif
@@ -1647,7 +1648,7 @@ void webserver_send_content_P(struct webserver_t *client, PGM_P buf, uint16_t si
   }
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    loggingSerial.printf("Sendlist queue is full\n");
+    SerialMonitor->printf("Sendlist queue is full\n");
   #else
     printf("Sendlist queue is full\n");
   #endif
@@ -1680,7 +1681,7 @@ void webserver_send_content(struct webserver_t *client, char *buf, uint16_t size
   /*LCOV_EXCL_START*/
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   #endif
@@ -1695,7 +1696,7 @@ void webserver_send_content(struct webserver_t *client, char *buf, uint16_t size
   }
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    loggingSerial.printf("Sendlist queue is full\n");
+    SerialMonitor->printf("Sendlist queue is full\n");
   #else
     printf("Sendlist queue is full\n");
   #endif
@@ -1705,7 +1706,7 @@ void webserver_send_content(struct webserver_t *client, char *buf, uint16_t size
   memset(node, 0, sizeof(struct sendlist_t));
   if((node->data.ptr = malloc(size+1)) == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   #endif
@@ -1794,10 +1795,10 @@ static void webserver_client_close(struct webserver_t *client) {
    
 if(heishamonSettings.logSerial1){
 #if defined(ESP8266) || defined(ESP32)
-  loggingSerial.print(F("Closing webserver client: "));
-  loggingSerial.print(client->client->remoteIP().toString().c_str());
-  loggingSerial.print(F(":"));
-  loggingSerial.println(client->pcb->remote_port);
+  SerialMonitor->print(F("Closing webserver client: "));
+  SerialMonitor->print(client->client->remoteIP().toString().c_str());
+  SerialMonitor->print(F(":"));
+  SerialMonitor->println(client->pcb->remote_port);
 }
   if(client->callback != NULL) {
     client->callback(client, NULL);
@@ -2077,7 +2078,7 @@ uint8_t webserver_sync_receive(struct webserver_t *client, uint8_t *rbuffer, uin
 err_t webserver_async_receive(void *arg, tcp_pcb *pcb, struct pbuf *data, err_t err) {
   uint16_t size = 0;
   uint8_t i = 0;
-        loggingSerial.printf("\n%i WEBSERVER_CLIENT_receive",__LINE__);
+        SerialMonitor->printf("\n%i WEBSERVER_CLIENT_receive",__LINE__);
   if(data == NULL) {
     for(i=0;i<WEBSERVER_MAX_CLIENTS;i++) {
       if(clients[i].data.pcb == pcb) {
@@ -2141,7 +2142,7 @@ err_t webserver_poll(void *arg, struct tcp_pcb *pcb) {
       }
       if((unsigned long)(millis() - clients[i].data.lastseen) > WEBSERVER_CLIENT_TIMEOUT) {
   #if defined(ESP8266) || defined(ESP32)
-        loggingSerial.printf("Timeout webserver client: %s:%d", clients[i].data.client->remoteIP().toString().c_str(), clients[i].data.client->remotePort());
+        SerialMonitor->printf("Timeout webserver client: %s:%d", clients[i].data.client->remoteIP().toString().c_str(), clients[i].data.client->remotePort());
   #endif
         clients[i].data.step = WEBSERVER_CLIENT_CLOSE;
         webserver_client_close(&clients[i].data);
@@ -2231,10 +2232,10 @@ err_t webserver_client(void *arg, tcp_pcb *pcb, err_t err) {
       clients[i].data.async = 1;
       clients[i].data.step = WEBSERVER_CLIENT_READ_HEADER;
     if(heishamonSettings.logSerial1){
-      loggingSerial.print(F("New webserver client: "));
-      loggingSerial.print(clients[i].data.client->remoteIP().toString().c_str());
-      loggingSerial.print(F(":"));
-      loggingSerial.println(clients[i].data.pcb->remote_port);
+      SerialMonitor->print(F("New webserver client: "));
+      SerialMonitor->print(clients[i].data.client->remoteIP().toString().c_str());
+      SerialMonitor->print(F(":"));
+      SerialMonitor->println(clients[i].data.pcb->remote_port);
     }
       //tcp_nagle_disable(pcb);
       tcp_recv(pcb, &webserver_async_receive);
@@ -2264,10 +2265,10 @@ void webserver_loop(void) {
     }
     if((unsigned long)(millis() - clients[i].data.lastseen) > WEBSERVER_CLIENT_TIMEOUT) {
 #if defined(ESP8266) || defined(ESP32)
-        loggingSerial.print("Timeout webserver client: ");
-        loggingSerial.print(clients[i].data.client->remoteIP());
-        loggingSerial.print(":");
-        loggingSerial.println(clients[i].data.client->remotePort());
+        SerialMonitor->print("Timeout webserver client: ");
+        SerialMonitor->print(clients[i].data.client->remoteIP());
+        SerialMonitor->print(":");
+        SerialMonitor->println(clients[i].data.client->remotePort());
 #endif
       clients[i].data.step = WEBSERVER_CLIENT_CLOSE;
     }
@@ -2283,11 +2284,11 @@ void webserver_loop(void) {
         memset(&clients[i].data.buffer, 0, WEBSERVER_BUFFER_SIZE);
       } break;
       case WEBSERVER_CLIENT_ARGS:
-//loggingSerial.printf("\n%i WEBSERWER CLIENT_ARGS",__LINE__);
+//SerialMonitor->printf("\n%i WEBSERWER CLIENT_ARGS",__LINE__);
       case WEBSERVER_CLIENT_WEBSOCKET:
-//loggingSerial.printf("\n%i WEBSERWER CLIENT_WEBSOCKET",__LINE__);
+//SerialMonitor->printf("\n%i WEBSERWER CLIENT_WEBSOCKET",__LINE__);
       case WEBSERVER_CLIENT_READ_HEADER: {
-//loggingSerial.printf("\n%i READ_HEADER",__LINE__);        
+//SerialMonitor->printf("\n%i READ_HEADER",__LINE__);        
         if(clients[i].data.client->connected() || clients[i].data.client->available()) {
           if(clients[i].data.client->available()) {
             uint8_t *p = (uint8_t *)rbuffer;
@@ -2307,7 +2308,7 @@ void webserver_loop(void) {
         }
       } break;
       case WEBSERVER_CLIENT_WRITE: {
-//loggingSerial.printf("\n%i WEBSERWER WRITE",__LINE__);
+//SerialMonitor->printf("\n%i WEBSERWER WRITE",__LINE__);
         if(clients[i].data.callback != NULL) {
           if(clients[i].data.step == WEBSERVER_CLIENT_WRITE) {
             if(clients[i].data.callback(&clients[i].data, NULL) == -1) {
@@ -2336,10 +2337,10 @@ void webserver_loop(void) {
       case WEBSERVER_CLIENT_CLOSE: {
 #if defined(ESP8266) || defined(ESP32)
   if(heishamonSettings.logSerial1){
-        loggingSerial.print("Closing webserver client: ");
-        loggingSerial.print(clients[i].data.client->remoteIP());
-        loggingSerial.print(":");
-        loggingSerial.println(clients[i].data.client->remotePort());
+        SerialMonitor->print("Closing webserver client: ");
+        SerialMonitor->print(clients[i].data.client->remoteIP());
+        SerialMonitor->print(":");
+        SerialMonitor->println(clients[i].data.client->remotePort());
   }
 #endif
         if(clients[i].data.callback != NULL) {
@@ -2367,10 +2368,10 @@ void webserver_loop(void) {
           clients[i].data.client->setNoDelay(true);
           clients[i].data.client->setTimeout(5000);
         if(heishamonSettings.logSerial1){
-          loggingSerial.print("New webserver client: ");
-          loggingSerial.print(clients[i].data.client->remoteIP());
-          loggingSerial.print(":");
-          loggingSerial.println(clients[i].data.client->remotePort());
+          SerialMonitor->print("New webserver client: ");
+          SerialMonitor->print(clients[i].data.client->remoteIP());
+          SerialMonitor->print(":");
+          SerialMonitor->println(clients[i].data.client->remotePort());
           break;
         }
         }
@@ -2427,7 +2428,7 @@ int8_t webserver_start(int port, webserver_cb_t *callback, uint8_t async) {
     rbuffer = (uint8_t *)malloc(WEBSERVER_READ_SIZE);
     if(rbuffer == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-      loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+      SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
       ESP.restart();
       exit(-1);
 #endif
@@ -2445,12 +2446,12 @@ int8_t webserver_start(int port, webserver_cb_t *callback, uint8_t async) {
 
 #if defined(ESP8266) || defined(ESP32)
   if(async == 1) {
-    loggingSerial.print("A-sync ");
+    SerialMonitor->print("A-sync ");
   } else {
-    loggingSerial.print("Sync ");
+    SerialMonitor->print("Sync ");
   }
-  loggingSerial.print("webserver server started at port: ");
-  loggingSerial.println(port);
+  SerialMonitor->print("webserver server started at port: ");
+  SerialMonitor->println(port);
 #endif
   return 0;
 }

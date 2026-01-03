@@ -306,11 +306,11 @@ void decode_heatpump_data(char* data, char* actData, PubSubClient &mqtt_client, 
     }
 
     if (updateTime || updateTopic[Topic_Number]) {
-//#jacek   usuwamy okresowe wyswietlanie wszystkich topic bo to zakóoca pracę 
-//#jacek   char log_msg[256];
+//#optimalization   usuwamy okresowe wyswietlanie wszystkich topic bo to zakóoca pracę 
+//#optimalization   char log_msg[256];
       char mqtt_topic[256];
-//#jacek       sprintf_P(log_msg, PSTR("received TOP%d %s: %s"), Topic_Number, topics[Topic_Number], Topic_Value.c_str());
-//#jacek       log_message(log_msg);
+//#optimalization       sprintf_P(log_msg, PSTR("received TOP%d %s: %s"), Topic_Number, topics[Topic_Number], Topic_Value.c_str());
+//#optimalization       log_message(log_msg);
       sprintf_P(mqtt_topic, PSTR("%s/%s/%s"), mqtt_topic_base, mqtt_topic_values, topics[Topic_Number]);
       mqtt_client.publish(mqtt_topic, Topic_Value.c_str(), MQTT_RETAIN_VALUES);
     }
@@ -356,7 +356,7 @@ void decode_heatpump_data_extra(char* data, char* actDataExtra, PubSubClient &mq
       char log_msg[256];
       char mqtt_topic[256];
       sprintf_P(log_msg, PSTR("received XTOP%d %s: %s"), Topic_Number, xtopics[Topic_Number], Topic_Value.c_str());
-      if (DEBUG) log_message(log_msg);  //#opti
+      if (DEBUG) log_message(log_msg);  //#optimalization
       sprintf_P(mqtt_topic, PSTR("%s/%s/%s"), mqtt_topic_base, mqtt_topic_xvalues, xtopics[Topic_Number]);
       mqtt_client.publish(mqtt_topic, Topic_Value.c_str(), MQTT_RETAIN_VALUES);
     }

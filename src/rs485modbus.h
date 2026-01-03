@@ -13,7 +13,6 @@
 #include "htmlcode.h"
 #include "src/common/progmem.h"
 
-#define loggingSerial Serial 
 #define LOGRX 3
 #define LOGTX 1
 // use interface not using RE/DE PIN #define MODBUS_REDE_PIN GPIO_NUM_18  // RE/DE  GPIO18 is used for RS485 direction control for halfduplex devices
@@ -37,6 +36,7 @@ struct t_modbusDev {
   item Values[MAX_MODBUS_VALUEARRAY];
 };
 
+void changeSerialToLogging();
 void modbusSendMSG( int actModbDevact);
 void actSendMQTT( item &modbusItem, int actModbDevact);
 void InitModbusDev ();
