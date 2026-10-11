@@ -12,11 +12,10 @@
 
 #include "../rules/rules.h"
 
+extern  uint8_t mmu_get_uint8(void *ptr);//rs485
 #ifdef ESP8266
 #include <Arduino.h>
 #endif
-
-uint8_t mmu_get_uint8(void *ptr);
 
 int strnicmp(char const *a, char const *b, size_t len) {
   unsigned int i = 0;

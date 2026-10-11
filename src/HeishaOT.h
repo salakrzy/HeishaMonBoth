@@ -9,8 +9,8 @@
 #define inOTPin 3 //RX pin from ESP8266
 #define outOTPin 1 //TX pin from ESP8266
 #elif defined(ESP32)
-#define inOTPin 6
-#define outOTPin 7
+#define inOTPin 21
+#define outOTPin 23
 #endif
 
 // mqtt

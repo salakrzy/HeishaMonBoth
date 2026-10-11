@@ -7,6 +7,10 @@ byte panasonicQuery[] = {0x71, 0x6c, 0x01, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0
 byte optionalPCBQuery[] = {0xF1, 0x11, 0x01, 0x50, 0x00, 0x00, 0x40, 0xFF, 0xFF, 0xE5, 0xFF, 0xFF, 0x00, 0xFF, 0xEB, 0xFF, 0xFF, 0x00, 0x00};
 byte panasonicSendQuery[] PROGMEM = {0xf1, 0x6c, 0x01, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
+#ifdef ESP32
+extern QueueHandle_t pcbQueue;
+#endif
+
 const char* mqtt_topic_values PROGMEM = "main";
 const char* mqtt_topic_xvalues PROGMEM = "extra";
 const char* mqtt_topic_commands PROGMEM = "commands";
@@ -50,7 +54,7 @@ unsigned int set_heatpump_state(char *msg, unsigned char *cmd, char *log_msg) {
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set heatpump state to %d"), heatpump_state);
+    snprintf_P(tmp, 255, PSTR("set heatpump state to %d"), heatpump_state - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -73,7 +77,7 @@ unsigned int set_pump(char *msg, unsigned char *cmd, char *log_msg) {
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set pump state to %d"), pump_state);
+    snprintf_P(tmp, 255, PSTR("set pump state to %d"), (pump_state / 16) - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -274,7 +278,7 @@ unsigned int set_force_DHW(char *msg, unsigned char *cmd, char *log_msg) {
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set force DHW mode to %d"), force_DHW_mode);
+    snprintf_P(tmp, 255, PSTR("set force DHW mode to %d"), (force_DHW_mode / 64) - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -297,7 +301,7 @@ unsigned int set_force_defrost(char *msg, unsigned char *cmd, char *log_msg) {
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set force defrost mode to %d"), force_defrost_mode);
+    snprintf_P(tmp, 255, PSTR("set force defrost mode to %d"), force_defrost_mode / 2);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -306,6 +310,46 @@ unsigned int set_force_defrost(char *msg, unsigned char *cmd, char *log_msg) {
     cmd[8] = force_defrost_mode;
   }
 
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_sterilization_temp(char *msg, unsigned char *cmd, char *log_msg) {
+  if (msg == NULL || strlen(msg) != 2 || msg[0] < '0' || msg[0] > '9' || msg[1] < '0' || msg[1] > '9') {
+    snprintf_P(log_msg, 256, PSTR("Invalid sterilization temperature: expected integer 55-75 C"));
+    return 0;
+  }
+  const int temperature = (msg[0] - '0') * 10 + (msg[1] - '0');
+  if (temperature < 55 || temperature > 75) {
+    snprintf_P(log_msg, 256, PSTR("Invalid sterilization temperature: expected integer 55-75 C"));
+    return 0;
+  }
+
+  memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+  cmd[100] = temperature + 128;
+  snprintf_P(log_msg, 256, PSTR("set sterilization temperature to %d C"), temperature);
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_sterilization_max_time(char *msg, unsigned char *cmd, char *log_msg) {
+  int minutes = 0;
+  const size_t length = msg == NULL ? 0 : strlen(msg);
+  if (length > 0 && length <= 2) {
+    for (size_t i = 0; i < length; ++i) {
+      if (msg[i] < '0' || msg[i] > '9') {
+        minutes = 0;
+        break;
+      }
+      minutes = minutes * 10 + (msg[i] - '0');
+    }
+  }
+  if (minutes < 5 || minutes > 60 || minutes % 5 != 0) {
+    snprintf_P(log_msg, 256, PSTR("Invalid sterilization holding time: expected multiple of 5 minutes from 5 to 60"));
+    return 0;
+  }
+
+  memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+  cmd[101] = minutes + 1;
+  snprintf_P(log_msg, 256, PSTR("set sterilization holding time to %d minutes"), minutes);
   return sizeof(panasonicSendQuery);
 }
 
@@ -320,13 +364,36 @@ unsigned int set_force_sterilization(char *msg, unsigned char *cmd, char *log_ms
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set force sterilization mode to %d"), force_sterilization_mode);
+    snprintf_P(tmp, 255, PSTR("set force sterilization mode to %d"), force_sterilization_mode / 4);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
   {
     memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
     cmd[8] = force_sterilization_mode;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_force_heater(char *msg, unsigned char *cmd, char *log_msg) {
+
+  String set_force_heater_string(msg);
+
+  byte force_heater_mode = 4; //hex 0x04
+  if ( set_force_heater_string.toInt() == 1 ) {
+    force_heater_mode = 8; //hex 0x08
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set force heater mode to %d"), (force_heater_mode / 4) - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[5] = force_heater_mode;
   }
 
   return sizeof(panasonicSendQuery);
@@ -343,7 +410,7 @@ unsigned int set_holiday_mode(char *msg, unsigned char *cmd, char *log_msg) {
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set holiday mode to %d"), set_holiday);
+    snprintf_P(tmp, 255, PSTR("set holiday mode to %d"), (set_holiday / 16) - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -437,7 +504,7 @@ unsigned int set_bivalent_control(char *msg, unsigned char *cmd, char *log_msg) 
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set bivalent control to %d"), set_bivalent_control_string.toInt());
+    snprintf_P(tmp, 255, PSTR("set bivalent control to %d"), set_bcontrol - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -463,7 +530,7 @@ unsigned int set_bivalent_mode(char *msg, unsigned char *cmd, char *log_msg) {
   }
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set bivalent mode to %d"), set_bivalent_mode_string.toInt());
+    snprintf_P(tmp, 255, PSTR("set bivalent mode to %d"), (set_bmode / 4) - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -689,7 +756,7 @@ unsigned int set_main_schedule(char *msg, unsigned char *cmd, char *log_msg) {
 
   {
     char tmp[256] = { 0 };
-    snprintf_P(tmp, 255, PSTR("set main schedule to %d"), byteValue);
+    snprintf_P(tmp, 255, PSTR("set main schedule to %d"), (byteValue / 64) - 1);
     memcpy(log_msg, tmp, sizeof(tmp));
   }
 
@@ -870,6 +937,187 @@ unsigned int set_external_error(char *msg, unsigned char *cmd, char *log_msg){
   return sizeof(panasonicSendQuery);
 }
 
+unsigned int set_heatingcontrol(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address=30;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set heating control %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value << 2;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_smart_dhw(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address=24;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set smart dhw %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value << 6;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_quiet_mode_priority(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address=11;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set quiet mode priority %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value << 4;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_pump_flowrate_mode(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address=29;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set pump flowrate mode %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value << 4;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_dhw_sensor_selection(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address = 11;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set dhw sensor selection %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_dhw_heater_state(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address = 9;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set dhw heater state %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value << 2;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_room_heater_state(char *msg, unsigned char *cmd, char *log_msg) {
+
+  const byte address = 9;
+  byte value = 0b01;
+
+  if ( String(msg).toInt() == 1 ) {
+    value = 0b10;
+  }
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set room heater state %d"), value - 1);
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[address] = value;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
+unsigned int set_heater_on_outdoor_temp(char *msg, unsigned char *cmd, char *log_msg) {
+
+  String stringValue(msg);
+
+  byte byteValue = stringValue.toInt() + 128;
+
+  {
+    char tmp[256] = { 0 };
+    snprintf_P(tmp, 255, PSTR("set heater on outdoor temp to %d"), byteValue - 128 );
+    memcpy(log_msg, tmp, sizeof(tmp));
+  }
+
+  {
+    memcpy_P(cmd, panasonicSendQuery, sizeof(panasonicSendQuery));
+    cmd[85] = byteValue;
+  }
+
+  return sizeof(panasonicSendQuery);
+}
+
 unsigned int set_external_compressor_control(char *msg, unsigned char *cmd, char *log_msg){
   const byte off_state=64;
   const byte address=23;
@@ -1037,18 +1285,18 @@ unsigned int set_solar_temp(char *msg, char *log_msg) {
 
 
 
-void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int,bool ), void (*log_message)(char*), bool optionalPCB) {
+void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB) {
   unsigned char cmd[256] = { 0 };
   char log_msg[256] = { 0 };
   unsigned int len = 0;
-bool direction = false;
+
   for (unsigned int i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
     cmdStruct tmp;
     memcpy_P(&tmp, &commands[i], sizeof(tmp));
     if (strcmp(topic, tmp.name) == 0) {
       len = tmp.func(msg, cmd, log_msg);
       log_message(log_msg);
-      if (len > 0) send_command(cmd, len, direction);
+      if (len > 0) send_command(cmd, len);
     }
   }
 
@@ -1060,6 +1308,9 @@ bool direction = false;
       if (strcmp(topic, tmp.name) == 0) {
         len = tmp.func(msg, log_msg);
         log_message(log_msg);
+#ifdef ESP32        
+       xQueueOverwrite(pcbQueue, optionalPCBQuery);
+#endif          
       }
     }
   }

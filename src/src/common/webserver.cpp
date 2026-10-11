@@ -1,5 +1,5 @@
 /*
-  Copyright (C) CurlyMo 
+  Copyright (C) CurlyMo
   https://github.com/CurlyMoo/webserver
 
   This Source Code Form is subject to the terms of the Mozilla Public
@@ -55,9 +55,7 @@
 
   #include <errno.h>
 #endif
-#include "../../webfunctions.h"
-extern settingsStruct heishamonSettings;
-extern Stream *SerialMonitor; //redirect Serial to loggingSerial
+extern Stream *SerialModbMonitor; //rs485 redirect Serial to loggingSerial
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #ifndef ERR_OK
   #define ERR_OK 0
@@ -66,7 +64,7 @@ extern Stream *SerialMonitor; //redirect Serial to loggingSerial
 #if defined(ESP8266)
   #define loggingSerial Serial1
 #elif defined(ESP32)
-//  #define loggingSerial Serial //usb serial CDC
+  #define loggingSerial (*SerialModbMonitor)//rs485 redirect Serial to loggingSerial
 #endif
 
 
@@ -79,11 +77,45 @@ static WiFiServer sync_server(0);
 #endif
 static uint8_t *rbuffer = NULL;
 
+/*
+  safe write is necessary for esp8266 so it doesn't block
+  on esp32 wifi is multithreaded, not necessary but also not implemented on availableforWrite so skip it there
+*/
+static int16_t safe_write(struct webserver_t *client, const uint8_t *buf, uint16_t len) {
+#if defined(ESP8266)
+  uint32_t start = millis();
+  while(client->client->availableForWrite() == 0) {
+    if((unsigned long)(millis() - start) > 1000) {
+      // client is too slow, give up
+      client->step = WEBSERVER_CLIENT_CLOSE;
+      return -1;
+    }
+    yield();
+  }
+#endif
+  return client->client->write(buf, len);
+}
+
+static int16_t safe_write_P(struct webserver_t *client, PGM_P buf, uint16_t len) {
+#if defined(ESP8266)
+  uint32_t start = millis();
+  while(client->client->availableForWrite() == 0) {
+    if((unsigned long)(millis() - start) > 1000) {
+      // client is too slow, give up
+      client->step = WEBSERVER_CLIENT_CLOSE;
+      return -1;
+    }
+    yield();
+  }
+#endif
+  return client->client->write_P((char *)buf, len);
+}
+
 #if defined(ESP8266) || defined(ESP32)
 static uint16_t tcp_write_P(tcp_pcb *pcb, PGM_P buf, uint16_t len, uint8_t flags) {
   char *str = (char *)malloc(len+1);
   if(str == NULL) {
-    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   }
@@ -331,7 +363,7 @@ static int webserver_parse_post(struct webserver_t *client, uint16_t size) {
       }
     }
 
-    if((client->ptr >= WEBSERVER_BUFFER_SIZE || ptrD != NULL) && strncmp((char *)&client->buffer[pos+1], "HTTP/1.1", 8) != 0) {
+    if((client->ptr >= WEBSERVER_BUFFER_SIZE || ptrD != NULL) && strncmp((char *)&client->buffer[pos+1], "HTTP/1.", 7) != 0) {
       /*
        * GET end delimiter before HTTP/1.1
        */
@@ -511,7 +543,23 @@ static int webserver_parse_post(struct webserver_t *client, uint16_t size) {
 
 int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *len) {
   uint16_t hasread = MIN(WEBSERVER_BUFFER_SIZE-client->ptr, *len);
+  uint16_t lastptr = 0xFFFF, lastlen = 0xFFFF;
+  uint8_t lastsubstep = 0xFF;
   while((*len > 0) || (strnstr(client->buffer, "\r\n\r\n", client->ptr) != NULL)) {
+    /*
+     * A malformed request can leave the parser without any
+     * way to progress while the loop condition stays true
+     * (e.g. a complete request still in the buffer). Bail
+     * out instead of spinning forever and blocking the
+     * main loop.
+     */
+    if(client->ptr == lastptr && *len == lastlen && client->substep == lastsubstep) {
+      return -1;
+    }
+    lastptr = client->ptr;
+    lastlen = *len;
+    lastsubstep = client->substep;
+
     hasread = MIN(WEBSERVER_BUFFER_SIZE-client->ptr, (*len));
     memcpy(&client->buffer[client->ptr], &(*buf)[0], hasread);
 
@@ -554,6 +602,16 @@ int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *l
         memmove(&client->buffer[0], &client->buffer[5], client->ptr-5);
         client->ptr -= 5;
         client->substep = 1;
+      }
+      if(client->substep == 0) {
+        /*
+         * Unsupported request method (HEAD, OPTIONS, binary
+         * probes from network scanners, etc.)
+         */
+        if(client->ptr >= 5 || memchr(client->buffer, '\n', client->ptr) != NULL) {
+          return -1;
+        }
+        return 1;
       }
     }
       /*
@@ -617,7 +675,7 @@ int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *l
       }
 
       if(client->ptr >= 4) {
-        if(memcmp_P(client->buffer, " HTTP/1.1", 9) == 0) {
+        if(memcmp_P(client->buffer, PSTR(" HTTP/1."), 8) == 0) {
           client->substep = 3;
         } else {
           continue;
@@ -690,7 +748,7 @@ int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *l
               memcpy(tmp, &client->buffer[x+1], args.len);
               if((client->data.websockkey = strdup(tmp)) == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-                SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+                loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
                 ESP.restart();
                 exit(-1);
 #endif
@@ -709,7 +767,7 @@ int8_t http_parse_request(struct webserver_t *client, uint8_t **buf, uint16_t *l
                   tmp[args.len-pos] = 0;
                   if((client->data.boundary = strdup(tmp)) == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-                    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+                    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
                     ESP.restart();
                     exit(-1);
 #endif
@@ -852,14 +910,26 @@ int http_parse_multipart_body(struct webserver_t *client, unsigned char *buf, ui
                 memmove(&client->buffer[0], &client->buffer[pos+1], client->ptr-(pos+1));
                 client->ptr = client->ptr-(pos+1);
                 client->buffer[client->ptr] = 0;
-                client->readlen += ((pos+1)-pos1);
+                /*
+                 * pos1 is NOT subtracted here: it exists to compensate for a
+                 * field-name marker that case 4/case 6's short-name path used
+                 * to (wrongly) credit into readlen. Now that those cases
+                 * correctly exclude the marker themselves (see their fixes
+                 * below), there is nothing left here to compensate for -
+                 * subtracting pos1 would double-discount it and desync
+                 * readlen from the true byte count whenever a field's name
+                 * marker is still retained in the buffer.
+                 */
+                client->readlen += (pos+1);
                 client->substep = 1;
               }
             }
             if(pos+3 <= client->ptr) {
               if(client->buffer[pos] == '-' && client->buffer[pos+1] == '-' &&
                 client->buffer[pos+2] == '\r' && client->buffer[pos+3] == '\n') {
-                client->readlen += ((pos+4)-(pos1));
+                // See the comment on the mid-boundary branch above for why
+                // pos1 is not subtracted here either.
+                client->readlen += (pos+4);
                 if(client->readlen == client->totallen) {
                   if(client->data.boundary != NULL) {
                     free(client->data.boundary);
@@ -936,17 +1006,56 @@ int http_parse_multipart_body(struct webserver_t *client, unsigned char *buf, ui
           unsigned char *ptr = strncasestr(client->buffer, "\";", client->ptr);
           if(ptr != NULL) {
             uint16_t pos = (ptr-client->buffer);
-            unsigned char *ptr1 = strncasestr(&client->buffer[pos], "\r\n", client->ptr-pos);
+            // First try to find \r\n\r\n (end of all headers)
+            unsigned char *ptr1 = strnstr(&client->buffer[pos], "\r\n\r\n", client->ptr-pos);
             if(ptr1 != NULL) {
-              client->buffer[pos++] = '=';
-              uint16_t pos1 = (ptr1-client->buffer);
-              uint16_t newlen = client->ptr-((pos1+2)-pos);
-              memmove(&client->buffer[pos], &client->buffer[pos1+2], newlen);
-              client->ptr = newlen;
-              client->readlen += (pos1+2);
-              client->substep = 5;
+                // Double CRLF found - skip directly to data
+                client->buffer[pos++] = '=';
+                uint16_t pos1 = (ptr1-client->buffer);
+                uint16_t newlen = client->ptr-((pos1+4)-pos);
+                /*
+                 * The memmove must only copy the bytes that are actually
+                 * still valid past pos1+4 (client->ptr-(pos1+4)), NOT
+                 * newlen: newlen is the FINAL ptr value, which already
+                 * accounts for the retained "name=" marker staying at
+                 * buffer position 0..pos-1. Using newlen as the copy length
+                 * here reads past the end of the valid buffered content
+                 * into stale memory.
+                 */
+                memmove(&client->buffer[pos], &client->buffer[pos1+4], client->ptr-(pos1+4));
+                client->ptr = newlen;
+                /*
+                 * Only credit the actual header bytes consumed
+                 * ((pos1+4)-pos), not the full (pos1+4): the retained
+                 * "name=" marker (0..pos-1) stays physically in the buffer
+                 * for case 7/8 to use later, so it must NOT also be counted
+                 * as "consumed" here - doing so double-counts those bytes
+                 * (once via readlen here, again via ptr since they're still
+                 * buffered).
+                 */
+                client->readlen += ((pos1+4)-pos);
+                client->substep = 7;  // skip case 5 entirely, go straight to data
             } else {
-              client->substep = 6;
+                // Single \r\n - if more headers follow, go to case 5
+                ptr1 = strncasestr(&client->buffer[pos], "\r\n", client->ptr-pos);
+                if(ptr1 != NULL) {
+                    if (((ptr1-client->buffer) + 4) >= client->ptr) {
+                        //CRLF on end of buffer, wait for two more to make sure we are not at end of header
+					    loop = 0;
+                    } else {
+                        client->buffer[pos++] = '=';
+                        uint16_t pos1 = (ptr1-client->buffer);
+                        uint16_t newlen = client->ptr-((pos1+2)-pos);
+                        // See the double-CRLF branch above for why the
+                        // memmove length and readlen credit both exclude pos.
+                        memmove(&client->buffer[pos], &client->buffer[pos1+2], client->ptr-(pos1+2));
+                        client->ptr = newlen;
+                       client->readlen += ((pos1+2)-pos);
+                        client->substep = 5;
+                    }
+                  } else {
+                      client->substep = 6;
+                }
             }
           } else {
             loop = 0;
@@ -1002,9 +1111,11 @@ int http_parse_multipart_body(struct webserver_t *client, unsigned char *buf, ui
                   if(ptr2 != NULL) {
                     uint16_t pos1 = (ptr2-client->buffer)+4;
 
+                    // See the case 4 double-CRLF branch for why pos is
+                    // excluded from the readlen credit here too.
                     memmove(&client->buffer[pos], &client->buffer[pos1], client->ptr-pos1);
                     client->ptr -= (pos1-pos);
-                    client->readlen += pos1;
+                    client->readlen += (pos1-pos);
                     client->substep = 7;
                   } else {
                     loop = 0;
@@ -1256,17 +1367,17 @@ static uint16_t webserver_create_header(struct webserver_t *client, uint16_t cod
     i = header.ptr;
     client->step = WEBSERVER_CLIENT_WRITE;
   }
-  i += snprintf_P((char *)&p[i], sizeof(buffer) - i, PSTR("Server: HeishaMonBoth\r\n"));
+  i += snprintf_P((char *)&p[i], sizeof(buffer) - i, PSTR("Server: HeishaMon\r\n"));
   i += snprintf_P((char *)&p[i], sizeof(buffer) - i, PSTR("Keep-Alive: timeout=15, max=100\r\n"));
   i += snprintf_P((char *)&p[i], sizeof(buffer) - i, PSTR("Content-Type: %s\r\n"), mimetype);
   i += snprintf_P((char *)&p[i], sizeof(buffer) - i, PSTR("Content-Length: %d\r\n\r\n"), len);
 
 
   if(client->async == 1) {
-    tcp_write(client->pcb, &buffer, i, 0);
+    tcp_write(client->pcb, &buffer, i, TCP_WRITE_FLAG_COPY);
     tcp_output(client->pcb);
   } else {
-    if(client->client->write(buffer, i) > 0) {
+    if(safe_write(client,buffer, i) > 0) {
       if(client->is_websocket == 0) {
         client->lastseen = millis();
       }
@@ -1342,9 +1453,9 @@ static int webserver_process_send(struct webserver_t *client) {
     size_t n = snprintf_P((char *)chunk_size, sizeof(chunk_size), PSTR("%X\r\n"), client->totallen - cpylen);
 
     if(client->async == 1) {
-      tcp_write(client->pcb, chunk_size, n, 0);
+      tcp_write(client->pcb, chunk_size, n, TCP_WRITE_FLAG_COPY);
     } else {
-      if(client->client->write(chunk_size, n) > 0) {
+      if(safe_write(client,chunk_size, n) > 0) {
         if(client->is_websocket == 0) {
           client->lastseen = millis();
         }
@@ -1378,9 +1489,9 @@ static int webserver_process_send(struct webserver_t *client) {
              memcpy_P(cpy, &((PGM_P)tmp->data.ptr)[client->ptr], tmp->size);
 #endif
             if(client->async == 1) {
-              tcp_write(client->pcb, cpy, tmp->size, TCP_WRITE_FLAG_MORE);
+              tcp_write(client->pcb, cpy, tmp->size, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
             } else {
-              if(client->client->write(cpy, tmp->size) > 0) {
+              if(safe_write(client,cpy, tmp->size) > 0) {
                 if(client->is_websocket == 0) {
                   client->lastseen = millis();
                 }
@@ -1388,9 +1499,9 @@ static int webserver_process_send(struct webserver_t *client) {
             }
           } else {
             if(client->async == 1) {
-              tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], tmp->size, TCP_WRITE_FLAG_MORE);
+              tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], tmp->size, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
             } else {
-              if(client->client->write(&((unsigned char *)tmp->data.ptr)[client->ptr], tmp->size) > 0) {
+              if(safe_write(client,&((unsigned char *)tmp->data.ptr)[client->ptr], tmp->size) > 0) {
                 if(client->is_websocket == 0) {
                   client->lastseen = millis();
                 }
@@ -1432,9 +1543,9 @@ static int webserver_process_send(struct webserver_t *client) {
              memcpy_P(cpy, &((PGM_P)tmp->data.ptr)[client->ptr], client->totallen);
 #endif
             if(client->async == 1) {
-              tcp_write(client->pcb, cpy, client->totallen, TCP_WRITE_FLAG_MORE);
+              tcp_write(client->pcb, cpy, client->totallen, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
             } else {
-              if(client->client->write(cpy, client->totallen) > 0) {
+              if(safe_write(client,cpy, client->totallen) > 0) {
                 if(client->is_websocket == 0) {
                   client->lastseen = millis();
                 }
@@ -1442,9 +1553,9 @@ static int webserver_process_send(struct webserver_t *client) {
             }
           } else {
             if(client->async == 1) {
-              tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen, TCP_WRITE_FLAG_MORE);
+              tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
             } else {
-              if(client->client->write(&((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen) > 0) {
+              if(safe_write(client,&((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen) > 0) {
                 if(client->is_websocket == 0) {
                   client->lastseen = millis();
                 }
@@ -1466,9 +1577,9 @@ static int webserver_process_send(struct webserver_t *client) {
            memcpy_P(cpy, &((PGM_P)tmp->data.ptr)[client->ptr], (tmp->size-client->ptr));
 #endif
           if(client->async == 1) {
-            tcp_write(client->pcb, cpy, (tmp->size-client->ptr), TCP_WRITE_FLAG_MORE);
+            tcp_write(client->pcb, cpy, (tmp->size-client->ptr), TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
           } else {
-            if(client->client->write(cpy, (tmp->size-client->ptr)) > 0) {
+            if(safe_write(client,cpy, (tmp->size-client->ptr)) > 0) {
               if(client->is_websocket == 0) {
                 client->lastseen = millis();
               }
@@ -1476,9 +1587,9 @@ static int webserver_process_send(struct webserver_t *client) {
           }
         } else {
           if(client->async == 1) {
-            tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], (tmp->size-client->ptr), TCP_WRITE_FLAG_MORE);
+            tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], (tmp->size-client->ptr), TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
           } else {
-            if(client->client->write(&((unsigned char *)tmp->data.ptr)[client->ptr], (tmp->size-client->ptr)) > 0) {
+            if(safe_write(client,&((unsigned char *)tmp->data.ptr)[client->ptr], (tmp->size-client->ptr)) > 0) {
               if(client->is_websocket == 0) {
                 client->lastseen = millis();
               }
@@ -1519,9 +1630,9 @@ static int webserver_process_send(struct webserver_t *client) {
            memcpy_P(cpy, &((PGM_P)tmp->data.ptr)[client->ptr], client->totallen);
 #endif
           if(client->async == 1) {
-            tcp_write(client->pcb, cpy, client->totallen, TCP_WRITE_FLAG_MORE);
+            tcp_write(client->pcb, cpy, client->totallen, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
           } else {
-            if(client->client->write(cpy, client->totallen) > 0) {
+            if(safe_write(client,cpy, client->totallen) > 0) {
               if(client->is_websocket == 0) {
                 client->lastseen = millis();
               }
@@ -1529,9 +1640,9 @@ static int webserver_process_send(struct webserver_t *client) {
           }
         } else {
           if(client->async == 1) {
-            tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen, TCP_WRITE_FLAG_MORE);
+            tcp_write(client->pcb, &((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
           } else {
-            if(client->client->write(&((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen) > 0) {
+            if(safe_write(client,&((unsigned char *)tmp->data.ptr)[client->ptr], client->totallen) > 0) {
               if(client->is_websocket == 0) {
                 client->lastseen = millis();
               }
@@ -1544,9 +1655,9 @@ static int webserver_process_send(struct webserver_t *client) {
     }
     if(client->chunked == 1) {
       if(client->async == 1) {
-        tcp_write_P(client->pcb, PSTR("\r\n"), 2, TCP_WRITE_FLAG_MORE);
+        tcp_write_P(client->pcb, PSTR("\r\n"), 2, TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
       } else {
-        if(client->client->write_P((char *)PSTR("\r\n"), 2) > 0) {
+        if(safe_write_P(client,(char *)PSTR("\r\n"), 2) > 0) {
           if(client->is_websocket == 0) {
             client->lastseen = millis();
           }
@@ -1590,9 +1701,9 @@ static int webserver_process_send(struct webserver_t *client) {
       if(tmp == NULL) {
         if(client->chunked == 1) {
           if(client->async == 1) {
-            tcp_write_P(client->pcb, PSTR("0\r\n\r\n"), 5, 0);
+            tcp_write_P(client->pcb, PSTR("0\r\n\r\n"), 5, TCP_WRITE_FLAG_COPY);
           } else {
-            if(client->client->write_P((char *)PSTR("0\r\n\r\n"), 5) > 0) {
+            if(safe_write_P(client,(char *)PSTR("0\r\n\r\n"), 5) > 0) {
               if(client->is_websocket == 0) {
                 client->lastseen = millis();
               }
@@ -1601,9 +1712,9 @@ static int webserver_process_send(struct webserver_t *client) {
           i += 5;
         } else {
           if(client->async == 1) {
-            tcp_write_P(client->pcb, PSTR("\r\n\r\n"), 4, 0);
+            tcp_write_P(client->pcb, PSTR("\r\n\r\n"), 4, TCP_WRITE_FLAG_COPY);
           } else {
-            if(client->client->write_P((char *)PSTR("\r\n\r\n"), 4) > 0) {
+            if(safe_write_P(client,(char *)PSTR("\r\n\r\n"), 4) > 0) {
               if(client->is_websocket == 0) {
                 client->lastseen = millis();
               }
@@ -1633,7 +1744,7 @@ void webserver_send_content_P(struct webserver_t *client, PGM_P buf, uint16_t si
   /*LCOV_EXCL_START*/
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   #endif
@@ -1648,7 +1759,7 @@ void webserver_send_content_P(struct webserver_t *client, PGM_P buf, uint16_t si
   }
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Sendlist queue is full\n");
+    loggingSerial.printf("Sendlist queue is full\n");
   #else
     printf("Sendlist queue is full\n");
   #endif
@@ -1681,7 +1792,7 @@ void webserver_send_content(struct webserver_t *client, char *buf, uint16_t size
   /*LCOV_EXCL_START*/
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   #endif
@@ -1696,7 +1807,7 @@ void webserver_send_content(struct webserver_t *client, char *buf, uint16_t size
   }
   if(node == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Sendlist queue is full\n");
+    loggingSerial.printf("Sendlist queue is full\n");
   #else
     printf("Sendlist queue is full\n");
   #endif
@@ -1706,7 +1817,7 @@ void webserver_send_content(struct webserver_t *client, char *buf, uint16_t size
   memset(node, 0, sizeof(struct sendlist_t));
   if((node->data.ptr = malloc(size+1)) == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
   #endif
@@ -1766,10 +1877,10 @@ int8_t webserver_send(struct webserver_t *client, uint16_t code, char *mimetype,
 
 done:
     if(client->async == 1) {
-      tcp_write(client->pcb, &buffer, i, 0);
+      tcp_write(client->pcb, &buffer, i, TCP_WRITE_FLAG_COPY);
       tcp_output(client->pcb);
     } else{
-      if(client->client->write((unsigned char *)&buffer, i) > 0) {
+      if(safe_write(client,(unsigned char *)&buffer, i) > 0) {
         if(client->is_websocket == 0) {
           client->lastseen = millis();
         }
@@ -1792,16 +1903,16 @@ static void webserver_client_close(struct webserver_t *client) {
   if(client->callback != NULL) {
     client->callback(client, NULL);
   }
-   
-if(heishamonSettings.logSerial1){
 #if defined(ESP8266) || defined(ESP32)
-  SerialMonitor->print(F("Closing webserver client: "));
-  SerialMonitor->print(client->client->remoteIP().toString().c_str());
-  SerialMonitor->print(F(":"));
-  SerialMonitor->println(client->pcb->remote_port);
-}
-  if(client->callback != NULL) {
-    client->callback(client, NULL);
+  loggingSerial.print(F("Closing webserver client: "));
+  if(client->async == 1) {
+    loggingSerial.print(ipaddr_ntoa(&client->pcb->remote_ip));
+    loggingSerial.print(F(":"));
+    loggingSerial.println(client->pcb->remote_port);
+  } else {
+    loggingSerial.print(client->client->remoteIP().toString().c_str());
+    loggingSerial.print(F(":"));
+    loggingSerial.println(client->client->remotePort());
   }
 
   client->step = 0;
@@ -1849,41 +1960,42 @@ err_t webserver_sent(void *arg, tcp_pcb *pcb, uint16_t len) {
 }
 #endif
 
+
 static void send_websocket_handshake(struct webserver_t *client, const char *key) {
-  char cpy[61] = { 0 };
-  char input[20] = { 0 };
-  char encoded[20] = { 0 };
+  char cpy[61] = { 0 }; // key length = 24, magic = 36, + 1
+  unsigned char input[SHA1_DIGEST_SIZE] = { 0 };
+  char encoded[Base64encode_len(SHA1_DIGEST_SIZE)] = { 0 };
 
   const char *magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+  if(strlen(key) + strlen(magic) >= sizeof(cpy)) {
+    return; // of error
+  }
 
   snprintf(cpy, sizeof(cpy), "%s%s", key, magic);
 
-  sha1digest((uint8_t *)input, NULL, (uint8_t *)cpy, strlen(cpy));
+  sha1digest(input, NULL, (uint8_t *)cpy, strlen(cpy));
 
-  if(Base64encode(encoded, input, 20) > 0) {
-    uint16_t len = snprintf(NULL, 0,
-      "HTTP/1.1 101 Web Socket Protocol Handshake\r\n"
-      "Connection: Upgrade\r\n"
-      "Upgrade: websocket\r\n"
-      "Sec-WebSocket-Accept: %s\r\n\r\n", encoded);
+  if(Base64encode(encoded, input, SHA1_DIGEST_SIZE) <= 0) {
+    return;
+  }
 
-    char buf[len+1];
-    memset(&buf, 0, len+1);
-    len = snprintf((char *)&buf, len+1,
-      "HTTP/1.1 101 Web Socket Protocol Handshake\r\n"
-      "Connection: Upgrade\r\n"
-      "Upgrade: websocket\r\n"
-      "Sec-WebSocket-Accept: %s\r\n\r\n", encoded);
+  unsigned char buf[256];
+  int len = snprintf((char *)buf, sizeof(buf),
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Accept: %s\r\n\r\n", encoded);
 
-    if(client->async == 1) {
-      tcp_write(client->pcb, &buf, len, 0);
-      tcp_output(client->pcb);
-    } else {
-      if(client->client->write((unsigned char *)buf, len) > 0) {
-        if(client->is_websocket == 0) {
-          client->lastseen = millis();
-        }
-      }
+  if(len < 0 || len >= (int)sizeof(buf)) {
+    return;
+  }
+
+  if(client->async == 1) {
+    tcp_write(client->pcb, buf, len, TCP_WRITE_FLAG_COPY);
+    tcp_output(client->pcb);
+  } else {
+    if(safe_write(client,buf, len) > 0 && client->is_websocket == 0) {
+      client->lastseen = millis();
     }
   }
 }
@@ -2017,7 +2129,12 @@ int websocket_read(struct webserver_t *client, unsigned char *buf, ssize_t buf_l
 
 uint8_t webserver_sync_receive(struct webserver_t *client, uint8_t *rbuffer, uint16_t size) {
   if(client->step == WEBSERVER_CLIENT_READ_HEADER) {
-    if(http_parse_request(client, &rbuffer, &size) == 0) {
+    int8_t ret = http_parse_request(client, &rbuffer, &size);
+    if(ret == -1) {
+      client->step = WEBSERVER_CLIENT_CLOSE;
+      return 0;
+    }
+    if(ret == 0) {
       if(client->is_websocket == 1 && client->data.websockkey != NULL) {
         client->is_websocket = 1;
         client->lastping = millis();
@@ -2078,7 +2195,7 @@ uint8_t webserver_sync_receive(struct webserver_t *client, uint8_t *rbuffer, uin
 err_t webserver_async_receive(void *arg, tcp_pcb *pcb, struct pbuf *data, err_t err) {
   uint16_t size = 0;
   uint8_t i = 0;
-        SerialMonitor->printf("\n%i WEBSERVER_CLIENT_receive",__LINE__);
+
   if(data == NULL) {
     for(i=0;i<WEBSERVER_MAX_CLIENTS;i++) {
       if(clients[i].data.pcb == pcb) {
@@ -2142,7 +2259,7 @@ err_t webserver_poll(void *arg, struct tcp_pcb *pcb) {
       }
       if((unsigned long)(millis() - clients[i].data.lastseen) > WEBSERVER_CLIENT_TIMEOUT) {
   #if defined(ESP8266) || defined(ESP32)
-        SerialMonitor->printf("Timeout webserver client: %s:%d", clients[i].data.client->remoteIP().toString().c_str(), clients[i].data.client->remotePort());
+		loggingSerial.printf("Timeout webserver client: %s:%d", ipaddr_ntoa(&clients[i].data.pcb->remote_ip), clients[i].data.pcb->remote_port);
   #endif
         clients[i].data.step = WEBSERVER_CLIENT_CLOSE;
         webserver_client_close(&clients[i].data);
@@ -2231,12 +2348,12 @@ err_t webserver_client(void *arg, tcp_pcb *pcb, err_t err) {
       clients[i].data.pcb = pcb;
       clients[i].data.async = 1;
       clients[i].data.step = WEBSERVER_CLIENT_READ_HEADER;
-    if(heishamonSettings.logSerial1){
-      SerialMonitor->print(F("New webserver client: "));
-      SerialMonitor->print(clients[i].data.client->remoteIP().toString().c_str());
-      SerialMonitor->print(F(":"));
-      SerialMonitor->println(clients[i].data.pcb->remote_port);
-    }
+
+      loggingSerial.print(F("New webserver client: "));
+	  loggingSerial.print(ipaddr_ntoa(&clients[i].data.pcb->remote_ip));
+	  loggingSerial.print(F(":"));
+	  loggingSerial.println(clients[i].data.pcb->remote_port);
+
       //tcp_nagle_disable(pcb);
       tcp_recv(pcb, &webserver_async_receive);
       tcp_sent(pcb, &webserver_sent);
@@ -2253,6 +2370,20 @@ void webserver_loop(void) {
   uint8_t i = 0;
 
   for(i=0;i<WEBSERVER_MAX_CLIENTS;i++) {
+    /*
+     * size (and the shared rbuffer it indexes into) must be reset for every
+     * client, not just once per call: if a client at an earlier index reads
+     * real data this pass and sets size > 0, and a later client in this same
+     * pass is connected() but not yet available() (the common case for a
+     * mostly-idle websocket), the read below is skipped and size/rbuffer
+     * would otherwise still hold the EARLIER client's leftover bytes - which
+     * then get fed into webserver_sync_receive() below as if they were
+     * freshly received data for this client. In the reverse ordering, this
+     * silently injects a few stray bytes from another connection (e.g. a
+     * websocket ping/pong) into an in-progress firmware upload's multipart
+     * stream, corrupting the byte count against the declared Content-Length.
+     */
+    size = 0;
     if(clients[i].data.step == 0 || clients[i].data.async == 1) {
       continue;
     }
@@ -2265,10 +2396,10 @@ void webserver_loop(void) {
     }
     if((unsigned long)(millis() - clients[i].data.lastseen) > WEBSERVER_CLIENT_TIMEOUT) {
 #if defined(ESP8266) || defined(ESP32)
-        SerialMonitor->print("Timeout webserver client: ");
-        SerialMonitor->print(clients[i].data.client->remoteIP());
-        SerialMonitor->print(":");
-        SerialMonitor->println(clients[i].data.client->remotePort());
+        loggingSerial.print("Timeout webserver client: ");
+        loggingSerial.print(clients[i].data.client->remoteIP()); //ok to use, no async call
+        loggingSerial.print(":");
+        loggingSerial.println(clients[i].data.client->remotePort());
 #endif
       clients[i].data.step = WEBSERVER_CLIENT_CLOSE;
     }
@@ -2284,11 +2415,11 @@ void webserver_loop(void) {
         memset(&clients[i].data.buffer, 0, WEBSERVER_BUFFER_SIZE);
       } break;
       case WEBSERVER_CLIENT_ARGS:
-//SerialMonitor->printf("\n%i WEBSERWER CLIENT_ARGS",__LINE__);
+//SerialModbMonitor->printf("\n%i WEBSERWER CLIENT_ARGS",__LINE__);
       case WEBSERVER_CLIENT_WEBSOCKET:
-//SerialMonitor->printf("\n%i WEBSERWER CLIENT_WEBSOCKET",__LINE__);
+//SerialModbMonitor->printf("\n%i WEBSERWER CLIENT_WEBSOCKET",__LINE__);
       case WEBSERVER_CLIENT_READ_HEADER: {
-//SerialMonitor->printf("\n%i READ_HEADER",__LINE__);        
+//SerialModbMonitor->printf("\n%i READ_HEADER",__LINE__);        
         if(clients[i].data.client->connected() || clients[i].data.client->available()) {
           if(clients[i].data.client->available()) {
             uint8_t *p = (uint8_t *)rbuffer;
@@ -2308,7 +2439,7 @@ void webserver_loop(void) {
         }
       } break;
       case WEBSERVER_CLIENT_WRITE: {
-//SerialMonitor->printf("\n%i WEBSERWER WRITE",__LINE__);
+//SerialModbMonitor->printf("\n%i WEBSERWER WRITE",__LINE__);
         if(clients[i].data.callback != NULL) {
           if(clients[i].data.step == WEBSERVER_CLIENT_WRITE) {
             if(clients[i].data.callback(&clients[i].data, NULL) == -1) {
@@ -2336,12 +2467,10 @@ void webserver_loop(void) {
       } break;
       case WEBSERVER_CLIENT_CLOSE: {
 #if defined(ESP8266) || defined(ESP32)
-  if(heishamonSettings.logSerial1){
-        SerialMonitor->print("Closing webserver client: ");
-        SerialMonitor->print(clients[i].data.client->remoteIP());
-        SerialMonitor->print(":");
-        SerialMonitor->println(clients[i].data.client->remotePort());
-  }
+        loggingSerial.print("Closing webserver client: ");
+        loggingSerial.print(clients[i].data.client->remoteIP()); //ok to use, no async call
+        loggingSerial.print(":");
+        loggingSerial.println(clients[i].data.client->remotePort());
 #endif
         if(clients[i].data.callback != NULL) {
           clients[i].data.callback(&clients[i].data, NULL);
@@ -2367,12 +2496,12 @@ void webserver_loop(void) {
 
           clients[i].data.client->setNoDelay(true);
           clients[i].data.client->setTimeout(5000);
-        if(heishamonSettings.logSerial1){
-          SerialMonitor->printf("New webserver client %i:",i);
-          SerialMonitor->print(clients[i].data.client->remoteIP());
-          SerialMonitor->printf(":%u\n",clients[i].data.client->remotePort());
+
+          loggingSerial.print("New webserver client: ");
+          loggingSerial.print(clients[i].data.client->remoteIP());
+          loggingSerial.print(":");
+          loggingSerial.println(clients[i].data.client->remotePort());
           break;
-        }
         }
       }
     }
@@ -2427,7 +2556,7 @@ int8_t webserver_start(int port, webserver_cb_t *callback, uint8_t async) {
     rbuffer = (uint8_t *)malloc(WEBSERVER_READ_SIZE);
     if(rbuffer == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-      SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+      loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
       ESP.restart();
       exit(-1);
 #endif
@@ -2445,12 +2574,12 @@ int8_t webserver_start(int port, webserver_cb_t *callback, uint8_t async) {
 
 #if defined(ESP8266) || defined(ESP32)
   if(async == 1) {
-    SerialMonitor->print("A-sync ");
+    loggingSerial.print("A-sync ");
   } else {
-    SerialMonitor->print("Sync ");
+    loggingSerial.print("Sync ");
   }
-  SerialMonitor->print("webserver server started at port: ");
-  SerialMonitor->println(port);
+  loggingSerial.print("webserver server started at port: ");
+  loggingSerial.println(port);
 #endif
   return 0;
 }

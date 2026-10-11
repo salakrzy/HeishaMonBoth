@@ -23,7 +23,6 @@
 static unsigned int lasttime = 0;
 static unsigned int *calls = NULL;
 static unsigned int nrcalls = 0;
-extern Stream *SerialMonitor; //redirect Serial to loggingSerial
 
 #if !defined(ESP8266) && !defined(ESP32)
 static unsigned int micros() {
@@ -68,7 +67,7 @@ struct timerqueue_t *timerqueue_pop() {
   } else {
     if((timerqueue = (struct timerqueue_t **)realloc(timerqueue, sizeof(struct timerqueue_t *)*timerqueue_size)) == NULL) {
   #if defined(ESP8266) || defined(ESP32)
-      SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+      //loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
       ESP.restart();
       exit(-1);
   #else
@@ -145,7 +144,7 @@ void timerqueue_insert(int sec, int usec, int nr) {
 
   if((timerqueue = (struct timerqueue_t **)realloc(timerqueue, sizeof(struct timerqueue_t *)*(timerqueue_size+1))) == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    //loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
 #else
@@ -157,7 +156,7 @@ void timerqueue_insert(int sec, int usec, int nr) {
   node = (struct timerqueue_t *)malloc(sizeof(struct timerqueue_t));
   if(node == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-    SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+    //loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
     ESP.restart();
     exit(-1);
 #else
@@ -199,7 +198,7 @@ void timerqueue_update(void) {
       int nr = timerqueue[a]->nr;
       if((calls = (unsigned int *)realloc(calls, (nrcalls+1)*sizeof(unsigned int))) == NULL) {
 #if defined(ESP8266) || defined(ESP32)
-        SerialMonitor->printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
+        ///loggingSerial.printf("Out of memory %s:#%d\n", __FUNCTION__, __LINE__);
         ESP.restart();
         exit(-1);
 #else

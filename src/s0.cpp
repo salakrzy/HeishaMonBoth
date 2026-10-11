@@ -1,10 +1,13 @@
 #include <PubSubClient.h>
 #include "commands.h"
 #include "s0.h"
+#include "rules.h"
 
 #define MQTT_RETAIN_VALUES 1 // do we retain 1wire values?
 
 #define MINREPORTEDS0TIME 5000 // how often s0 Watts are reported (not faster than this)
+int DEFAULT_S0_PIN_1 = 22;
+int DEFAULT_S0_PIN_2 = 15;
 
 //global array for s0 data
 volatile s0DataStruct actS0Data[NUM_S0_COUNTERS];
@@ -48,10 +51,8 @@ IRAM_ATTR void countPulse(int i) {
     actS0Data[i].goodPulses++;
     actS0Data[i].avgPulseWidth = ((actS0Data[i].avgPulseWidth * (actS0Data[i].goodPulses - 1)) + curPulseWidth ) / actS0Data[i].goodPulses;
     badEdge[i] = false; //set it to false again to allow to count two bad edges as a new bad pulse because we know we had a good pulse now
-    } 
-  else if (lastEdgeS0[i] = newEdgeS0){}  // the  interupt called to fast 
-  else if (badEdge[i]){
-    actS0Data[i].badPulses++; //there was already an edge before so count this one as a bad pulse
+  } else {
+    if (badEdge[i]) actS0Data[i].badPulses++; //there was already an edge before so count this one as a bad pulse
     badEdge[i] = !badEdge[i]; //for now count it as a bad edge (if it is a edge for a good pulse, this will reset to false a few lines above). The bool is for not counting each edge as a bad pulse, but only two bad edges.
   }
   lastEdgeS0[i] = newEdgeS0; //store this edge time for next use
@@ -66,17 +67,11 @@ IRAM_ATTR void onS0Pulse2Change() {
 }
 
 
-void initS0Sensors(s0SettingsStruct s0Settings[],bool newPCB) {
-byte DEFAULT_S0_PIN_1;
-byte DEFAULT_S0_PIN_2;
-if (newPCB==LOW){ //DigitalRead(5) if LOW means old PCB is used
-   DEFAULT_S0_PIN_1=22;
-   DEFAULT_S0_PIN_2=23;
-} else{
-   DEFAULT_S0_PIN_1=22;
-   DEFAULT_S0_PIN_2=15;
-}
+void initS0Sensors(s0SettingsStruct s0Settings[]) {
   //setup s0 port 1
+  if(OldVersionPCB==true){
+    DEFAULT_S0_PIN_2 = 23;
+  }
   //TODO: check if this is still necessary
   //actS0Settings[0].gpiopin = s0Settings[0].gpiopin;
   actS0Settings[0].gpiopin = DEFAULT_S0_PIN_1;
@@ -106,7 +101,7 @@ if (newPCB==LOW){ //DigitalRead(5) if LOW means old PCB is used
 
 void restore_s0_Watthour(int s0Port, float watthour) {
   if ((s0Port == 1) || (s0Port == 2)) {
-    unsigned int newTotal = int(watthour * (actS0Settings[s0Port - 1].ppkwh / 1000.0));
+    unsigned long newTotal = (unsigned long)(watthour * (actS0Settings[s0Port - 1].ppkwh / 1000.0));
     if (newTotal > actS0Data[s0Port - 1].pulsesTotal) {
       noInterrupts();
       actS0Data[s0Port - 1].pulsesTotal = newTotal;
@@ -192,6 +187,14 @@ void s0Loop(PubSubClient &mqtt_client, void (*log_message)(char*), char* mqtt_to
       //update GUI over websocket
       sprintf_P(log_msg, PSTR("{\"data\": {\"s0values\": {\"s0port\": %d, \"Watt\": %u, \"Watthour\": %.2f, \"WatthourTotal\": %.2f}}}"), i+1, actS0Data[i].watt,Watthour,WatthourTotal);
       websocket_write_all(log_msg, strlen(log_msg));         
+      //send rules events
+      char s0_event[32];
+      snprintf_P(s0_event, sizeof(s0_event), PSTR("s0#watt_%d"), i + 1);
+      rules_event_cb("", s0_event);
+      snprintf_P(s0_event, sizeof(s0_event), PSTR("s0#watthour_%d"), i + 1);
+      rules_event_cb("", s0_event);
+      snprintf_P(s0_event, sizeof(s0_event), PSTR("s0#watthourtotal_%d"), i + 1);
+      rules_event_cb("", s0_event);
     }
   }
 }

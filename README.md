@@ -1,21 +1,30 @@
+# HeishaMonBoth Ver 4_2_3 changelog
+
+1. Przełączanie między starą a nową wersją płytki realizowane jest programowo w sekcji Settings (opcja New version PCB).
+2. W pliku platformio.ini dodano możliwość włączenia logowania do pliku (logfile) i debugowania ostatnich wykonanych rozkazów przed crash (esp32_exception_decoder).
+3. Zgodność funkcjonalna z projektem https://github.com/heishamon/HeishaMon z wyjątkiem funkcji wymagajacych GPIO które nie są wyprowadzone na złącza. Przemapowanie GPIO między HeishaMon (procesor ESP32-S3) a HeishaMonBoth (stara i nowa wersja PCB procesor ESP32D) zawiera plik "**GPIO compare.xlsx**"  w sekcji Doc.
+4. Zgodność z wersją 2.11.2 integracji https://github.com/kamaradclimber/heishamon-homeassistant/
+5. Lista obsługiwanych pomp ciepła zgodna z wykazem https://github.com/heishamon/HeishaMon/blob/main/HeatPumpType.md
+6. Lista MQTT Topics zgodna z https://github.com/heishamon/HeishaMon/blob/main/MQTT-Topics.md
+7. Usprawnienie odczytu liczników przez moduł rs485
+8. Zamiast do odczytu liczników, moduł RS485 zamontowany na płytce można wykorzystać do podłączenia oddalonego urządzenia (trzeba połaczyć skrzyżowane piny Rx oraz Tx modułu Rs485 i gniazda kabla do pompy lub CZTAW-1)
+9. Zoptymalizowany algorytm odczytu danych przez CZTAW-1
+10. Uwaga w starej wersji PCB jest błąd oznaczenia pinów gniazda GPIO_1 (podano numery wyprowadzeń pinów procesora zamiast numerów GPIO zamiast 30,31,33 powinno być 18,19,21)
+11. Przy migracji ze starszych wersji oprogramowania do wersji 4.2.3, może wystapić niezgodność formatu pliku config.json. Objawia się to brakiem możliwości zapisania zmiany konfiguracji bo po każdym restarcie wraca stara konfiguracja. W takim przypadku korzystając z zakładki Modbus należy ten plik skasować, dokonać restartu i poustawiać na nowo parametry. Alternatywna opcja to Factory Reset w zakładce Settings.
+12. Po nawiązaniu połączenia kablowego interfejs WiFi wyłącza się w celu zmniejszenia obciążenia procesora i poprawy szybkości działania serwera www. Po zerwaniu połączenia kablowego interfejs WiFi, włączy się samoczynnie i połączy się z lokalną siecią lub wystawi swój AP.
+
 # HeishaMonBoth Ver 3.9_a changelog
 
 * Stability and performance improvements.
-
 * When the RJ45cable i connected and the Ethernet interface has got IP address the WiFi interface is go down to reduce power consumpion.
-
 * Automatic selection of a strongest signal if the network uses APs with the same SSID or the network is of the MESH type.
-
 * Changing the flash memory partition table to follow backtrace errors messages.
-
 * Compatibile Integration ver 3.9 with HomeAssistant  [https://github.com/kamaradclimber/heishamon-homeassistant/](https://github.com/kamaradclimber/heishamon-homeassistant/)
 
 ## 485 Modbus
 
 * To reduce modbus errors now Modbus port run on hardware UART and logingmessages are redirected to SoftwareSerial port.
-
 * On begining the RxD0 and TxD0 are used to UART0 Rx and Tx. When checkbox Modbus in settings is set to On the hrdware UART0 is redirected to GPIO23 (Rx) and GPIO21(Tx).
-
 * The register definitions of the MOdbus device are user-configurable and stored in the ESP32 flash memory.
   You can download MOdbusxx.json file with your own counters definition to the flash memory in Modbus section.
 
@@ -168,4 +177,3 @@ Igor Ybema https://github.com/Egyras/HeishaMon
 and
 Alexander Gregor-Samosir https://github.com/gregor-samosir/HeishaMonKaskade
 for their projects that inspired me to write this modification.
-
