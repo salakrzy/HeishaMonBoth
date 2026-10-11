@@ -222,17 +222,17 @@ ModbusMessage RTUutils::receive(uint8_t caller, Stream& serial, uint32_t timeout
           // Yes. Note the time.
           lastMicros = micros();
           // Do we need to skip it, if it is zero?
-//          if (b > 0 || !skipLeadingZeroBytes) {
+          if (b > 0 || !skipLeadingZeroBytes) {
             // No, we can go process it regularly
             buffer[bufferPtr++] = b;
             state = IN_PACKET;
-//          } 
+          } 
         } else {
           // No, we had no byte. Just check the timeout period
           if (millis() - TimeOut >= timeout) {
+            delay(1); //newkill  DO not REMOVE killcrash No data received, so give the task scheduler room to breathe, if loop task are very short e.g just after boot it can make crash
             rv.push_back(TIMEOUT);
             state = FINISHED;
-          delay(2); // DO not REMOVE killcrash No data received, so give the task scheduler room to breathe, if loop task are very short e.g just after boot it can make crash
           }
           delay(1);
         }

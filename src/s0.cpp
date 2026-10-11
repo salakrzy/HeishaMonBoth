@@ -71,10 +71,10 @@ byte DEFAULT_S0_PIN_1;
 byte DEFAULT_S0_PIN_2;
 if (newPCB==LOW){ //DigitalRead(5) if LOW means old PCB is used
    DEFAULT_S0_PIN_1=22;
-   DEFAULT_S0_PIN_2=15;
+   DEFAULT_S0_PIN_2=23;
 } else{
    DEFAULT_S0_PIN_1=22;
-   DEFAULT_S0_PIN_2=23;
+   DEFAULT_S0_PIN_2=15;
 }
   //setup s0 port 1
   //TODO: check if this is still necessary

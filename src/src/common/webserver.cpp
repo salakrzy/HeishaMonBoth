@@ -2368,10 +2368,9 @@ void webserver_loop(void) {
           clients[i].data.client->setNoDelay(true);
           clients[i].data.client->setTimeout(5000);
         if(heishamonSettings.logSerial1){
-          SerialMonitor->print("New webserver client: ");
+          SerialMonitor->printf("New webserver client %i:",i);
           SerialMonitor->print(clients[i].data.client->remoteIP());
-          SerialMonitor->print(":");
-          SerialMonitor->println(clients[i].data.client->remotePort());
+          SerialMonitor->printf(":%u\n",clients[i].data.client->remotePort());
           break;
         }
         }
