@@ -215,9 +215,12 @@ if (heishamonSettings.modbusOn==true) {
   RTUutils::prepareHardwareSerial(Serial);
   int modbusRxPin = 23;
   int modbusTxPin = 21;
+  if (OldVersionPCB==true){
+    modbusRxPin = 21;
+    modbusTxPin = 15;
+  } 
   Serial.begin(9600,SERIAL_8N1,modbusRxPin,modbusTxPin);
   Serial.printf("%i MODBUS port speed =%i  \n",__LINE__,Serial.baudRate());
-  
   SoftLoggingSerial.begin(115200, SWSERIAL_8N1, LOGRX, LOGTX, false,256,2560); //    SerialModbMonitor->begin(115200, SWSERIAL_8N1, LOGRX, LOGTX, false,256,128); Zwiększenie bufora isrBufCapacity
   SoftLoggingSerial.enableIntTx(false); 
   SerialModbMonitor = &SoftLoggingSerial;
@@ -2155,6 +2158,7 @@ void setup() {
   }
 
   delay(200); //small delay to allow double reset
+  setupModbus();//RS485  
   #ifdef ESP32
   //turn off neopixel to indicate end of setup
   neoPixelState = pixels.Color(0,0,0);
