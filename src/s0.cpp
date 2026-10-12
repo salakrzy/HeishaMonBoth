@@ -70,7 +70,7 @@ IRAM_ATTR void onS0Pulse2Change() {
 void initS0Sensors(s0SettingsStruct s0Settings[]) {
   //setup s0 port 1
   if(OldVersionPCB==true){
-    DEFAULT_S0_PIN_2 = 23;
+    DEFAULT_S0_PIN_2 = 36; //for old PCB version, S0 port 2 is on GPIO36
   }
   //TODO: check if this is still necessary
   //actS0Settings[0].gpiopin = s0Settings[0].gpiopin;
