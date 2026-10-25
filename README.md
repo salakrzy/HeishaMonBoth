@@ -6,10 +6,10 @@
 4. Zgodność z wersją 2.11.2 integracji https://github.com/kamaradclimber/heishamon-homeassistant/
 5. Lista obsługiwanych pomp ciepła zgodna z wykazem https://github.com/heishamon/HeishaMon/blob/main/HeatPumpType.md
 6. Lista MQTT Topics zgodna z https://github.com/heishamon/HeishaMon/blob/main/MQTT-Topics.md
-7. Usprawnienie odczytu liczników przez moduł rs485
+7. Usprawnienie odczytu liczników przez moduł rs485. Plik definicji licznika musi mieć nazwę w formacie Xmodbus.json gdzie X to unikalny ciag znaków. Max 4 liczniki można zdefiniować.
 8. Zamiast do odczytu liczników, moduł RS485 zamontowany na płytce można wykorzystać do podłączenia oddalonego urządzenia (trzeba połaczyć skrzyżowane piny Rx oraz Tx modułu Rs485 i gniazda kabla do pompy lub CZTAW-1)
 9. Zoptymalizowany algorytm odczytu danych przez CZTAW-1
-10. Uwaga w starej wersji PCB jest błąd oznaczenia pinów gniazda GPIO_1 (podano numery wyprowadzeń pinów procesora zamiast numerów GPIO zamiast 30,31,33 powinno być 18,19,21)
+10. Uwaga w starej wersji PCB jest błąd oznaczenia pinów gniazda GPIO_1 (podano numery wyprowadzeń pinów procesora zamiast numerów GPIO zamiast 30,31,33 powinno być 18,19,21).
 11. Przy migracji ze starszych wersji oprogramowania do wersji 4.2.3, może wystapić niezgodność formatu pliku config.json. Objawia się to brakiem możliwości zapisania zmiany konfiguracji bo po każdym restarcie wraca stara konfiguracja. W takim przypadku korzystając z zakładki Modbus należy ten plik skasować, dokonać restartu i poustawiać na nowo parametry. Alternatywna opcja to Factory Reset w zakładce Settings.
 12. Po nawiązaniu połączenia kablowego interfejs WiFi wyłącza się w celu zmniejszenia obciążenia procesora i poprawy szybkości działania serwera www. Po zerwaniu połączenia kablowego interfejs WiFi, włączy się samoczynnie i połączy się z lokalną siecią lub wystawi swój AP.
 

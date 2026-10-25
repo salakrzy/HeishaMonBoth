@@ -9,8 +9,8 @@
 #include <WiFi.h>
 #include "src\common\webserver.h"
 #include "webfunctions.h"
-
-#define DEBUG false
+#define LOCAL_LOG_LEVEL LOG_LEVEL_ERROR
+#define TESTY false
 
 extern bool data_ready;
 extern PubSubClient mqtt_client;
@@ -187,7 +187,7 @@ actModbDev=0;
     modbusDef="/"+modbusDef;
     int size = file.size();
     SerialModbMonitor->printf("File name= /%s   size= %i\n",modbusDef,size);
-    if (modbusDef.endsWith(".json") && !modbusDef.equals("/config.json")) {
+    if (modbusDef.endsWith("modbus.json"))  {
       file=LittleFS.open(modbusDef,"r");
       std::unique_ptr<char[]> buf(new char[size]);
       file.readBytes(buf.get(), size);
@@ -220,10 +220,11 @@ actModbDev=0;
   file = root.openNextFile();
   delete [] buf;
 }  //while
-file.close();
+file.close(); 
 numModbDev=actModbDev;
 actModbDev=0;
   }else LOG_E(" Can't open LittleFS volumen");
+
 }
 
 void actSendMQTT( item &modbusItem,int actModbDevact){  //***********************************************************************************************
@@ -292,7 +293,7 @@ void handleData1(ModbusMessage response, uint32_t token) {  //******************
           offs = response.get(offs, powerRead[i]);
           delay(20);
         }
-       if(DEBUG) SerialModbMonitor->printf("numbers answer bytes declared in answer =  %i   number received bytes =  %i\n",words,2*modbusDev[actModbDev].numb_registers);
+       if(TESTY) SerialModbMonitor->printf("numbers answer bytes declared in answer =  %i   number received bytes =  %i\n",words,2*modbusDev[actModbDev].numb_registers);
         data_ready = true;
         modbusSendMQTT(actModbDev);
       }
@@ -303,7 +304,7 @@ void handleData1(ModbusMessage response, uint32_t token) {  //******************
   }
   else{log_message(_F("read other token than expected"));
   }
-  if(DEBUG){ for (int j = 0; j < 40; j++) SerialModbMonitor->printf("rej=%i; real= %8.4f    ", j,powerRead[j]);
+  if(TESTY){ for (int j = 0; j < 40; j++) SerialModbMonitor->printf("rej=%i; real= %8.4f    ", j,powerRead[j]);
     SerialModbMonitor->printf("\n");
   }
   actModbDev++;

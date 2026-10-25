@@ -2015,7 +2015,7 @@ void timer_cb(int nr) {
 void setup() {
   //first get total memory before we do anything
   getFreeMemory();
-  MBUlogLvl = LOG_LEVEL_VERBOSE; //SET the LOG Level to CRITICAL, ERROR, WARNING, INFO, DEBUG, VERBOSE tylko dla eMODBUS
+  MBUlogLvl = LOG_LEVEL_ERROR; //SET the LOG Level to CRITICAL, ERROR, WARNING, INFO, DEBUG, VERBOSE tylko dla eMODBUS
   //set boottime
   char *up = getUptime();
   free(up);
