@@ -12,6 +12,8 @@
 10. Uwaga w starej wersji PCB jest błąd oznaczenia pinów gniazda GPIO_1 (podano numery wyprowadzeń pinów procesora zamiast numerów GPIO zamiast 30,31,33 powinno być 18,19,21).
 11. Przy migracji ze starszych wersji oprogramowania do wersji 4.2.3, może wystapić niezgodność formatu pliku config.json. Objawia się to brakiem możliwości zapisania zmiany konfiguracji bo po każdym restarcie wraca stara konfiguracja. W takim przypadku korzystając z zakładki Modbus należy ten plik skasować, dokonać restartu i poustawiać na nowo parametry. Alternatywna opcja to Factory Reset w zakładce Settings.
 12. Po nawiązaniu połączenia kablowego interfejs WiFi wyłącza się w celu zmniejszenia obciążenia procesora i poprawy szybkości działania serwera www. Po zerwaniu połączenia kablowego interfejs WiFi, włączy się samoczynnie i połączy się z lokalną siecią lub wystawi swój AP.
+13. **Pełna separacja izolacyjna między płytką a licznikami MODBUS jest już możliwa**
+14. **<span style="color: red;">PEŁNA SEPARACJA IZOLACYJNA MIĘDZY PŁTYKĄ a POMPĄ CIEPŁA JEST JUŻ DOSTĘPNA co zabezpiecza pompę przed skutkami wyładowań atmosferycznych przy dłuższych odcinkach kabla Ethernet, do licznika Modbus lub do pompy.</span>**
 
 # HeishaMonBoth Ver 3.9_a changelog
 
